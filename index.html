@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Bip Treinos</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --line: #262b35; --ink: #e8ebf0; --mut: #8a93a3;
+    --acc: #3ddc84; --warn: #f5c542; --err: #ff6b6b; --blue: #4fb3ff;
+    font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.4;
+         padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+           padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 17px; margin: 0; flex: 1; letter-spacing: .2px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mut); display: inline-block; }
+  .dot.on { background: var(--acc); box-shadow: 0 0 8px var(--acc); }
+  #status { font-size: 12px; color: var(--mut); }
+  main { padding: 14px 16px; max-width: 640px; margin: 0 auto; }
+  section { display: none; } section.on { display: block; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--mut); margin: 18px 0 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .grow { flex: 1; min-width: 0; }
+  button { font: inherit; border: 0; border-radius: 10px; padding: 11px 14px; background: #2a303c; color: var(--ink); cursor: pointer; }
+  button.pri { background: var(--acc); color: #06210f; font-weight: 600; }
+  button.ghost { background: transparent; color: var(--mut); padding: 6px 8px; }
+  button:disabled { opacity: .45; }
+  textarea, input, select { font: inherit; width: 100%; background: #0b0d11; color: var(--ink); border: 1px solid var(--line);
+                            border-radius: 10px; padding: 10px; }
+  textarea { min-height: 170px; resize: vertical; font-size: 14px; }
+  label { font-size: 12px; color: var(--mut); display: block; margin: 8px 0 4px; }
+  .steps { margin: 6px 0 0; padding-left: 18px; color: var(--mut); font-size: 13px; }
+  .steps li { margin: 2px 0; }
+  .rep { color: var(--warn); }
+  .muted { color: var(--mut); font-size: 13px; }
+  .big { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+  .kpis div { background: #0b0d11; border-radius: 8px; padding: 6px; text-align: center; }
+  .kpis b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .kpis span { font-size: 11px; color: var(--mut); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  td, th { padding: 4px 3px; border-bottom: 1px solid var(--line); text-align: right; }
+  td:first-child, th:first-child { text-align: left; }
+  th { color: var(--mut); font-weight: 500; }
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: #0b0d11; color: var(--mut); }
+  .tag.ok { color: var(--acc); } .tag.stop { color: var(--warn); }
+  .bar { height: 6px; border-radius: 3px; background: #0b0d11; overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--acc); }
+  .ev-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: #12151b; border-top: 1px solid var(--line);
+        padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+  nav button { flex: 1; background: none; border-radius: 0; padding: 12px 4px 10px; color: var(--mut); font-size: 12px; }
+  nav button.on { color: var(--acc); }
+  nav svg { display: block; margin: 0 auto 3px; width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .hint { background: #13202a; border: 1px solid #1f3646; color: #bfe3ff; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin: 10px 0; }
+  .err { background: #2a1416; border-color: #4d2226; color: #ffc9c9; }
+  #log { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--mut); white-space: pre-wrap; max-height: 160px; overflow: auto; }
+  ol.how { padding-left: 20px; } ol.how li { margin: 6px 0; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>Bip Treinos</h1>
+  <span id="status">desconectado</span>
+  <button id="btnConn" class="pri">Conectar</button>
+</header>
+
+<main>
+  <!-- ======================= TREINOS ======================= -->
+  <section id="tab-treinos" class="on">
+    <div class="hint" id="btHint" hidden></div>
+    <h2>Texto do treinador</h2>
+    <textarea id="coach" placeholder="Cole aqui a planilha da semana, ex.:&#10;1º treino: Rodagem 10 km Leve (5:15 a 5:25)&#10;2º treino: Intervalado&#10;Aquecer: 10' regenerativo (6:15 a 6:30)&#10;Repetir 8 x: Correr 800 metros (4:30 a 4:40) descansar 200 metros (6:15 a 6:25)&#10;Desaquecer: 5' (6:15 a 6:25)"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button id="btnParse" class="grow">Interpretar</button>
+      <button id="btnSend" class="pri grow" disabled>Enviar ao relógio</button>
+    </div>
+    <div class="bar" id="sendBar" hidden><i></i></div>
+    <p class="muted" id="sendMsg"></p>
+    <h2 id="planTitle">Treinos</h2>
+    <div id="plan"><p class="muted">Nenhum treino ainda. Cole o texto e toque em Interpretar.</p></div>
+  </section>
+
+  <!-- ======================= RESULTADOS ======================= -->
+  <section id="tab-res">
+    <div class="row" style="margin-top:4px">
+      <button id="btnRead" class="pri grow">Baixar do relógio</button>
+      <button id="btnCsv" class="grow" disabled>Exportar CSV</button>
+    </div>
+    <div class="bar" id="readBar" hidden><i></i></div>
+    <p class="muted" id="readMsg">No relógio: abra Treinos e toque em Sincronizar.</p>
+    <div id="results"></div>
+    <button id="btnClear" class="ghost" hidden>Apagar histórico do relógio…</button>
+  </section>
+
+  <!-- ======================= CALENDARIO ======================= -->
+  <section id="tab-cal">
+    <h2>Novo compromisso</h2>
+    <div class="card">
+      <label for="evTitle">Título</label>
+      <input id="evTitle" maxlength="23" placeholder="Ex.: Dentista">
+      <div class="row">
+        <div class="grow"><label for="evDate">Data</label><input id="evDate" type="date"></div>
+        <div class="grow"><label for="evTime">Hora (vazio = dia todo)</label><input id="evTime" type="time"></div>
+      </div>
+      <label for="evColor">Cor</label>
+      <select id="evColor">
+        <option value="0">Branco</option><option value="1">Verde (treino)</option>
+        <option value="2">Amarelo</option><option value="3">Azul</option>
+      </select>
+      <div class="row" style="margin-top:10px">
+        <button id="btnAddEv" class="grow">Adicionar</button>
+        <button id="btnPlanEv" class="grow" title="Coloca os treinos interpretados nos próximos dias">+ Treinos da semana</button>
+      </div>
+    </div>
+    <div class="row">
+      <h2 class="grow">Próximos (<span id="evCount">0</span>/48)</h2>
+      <button id="btnSendCal" class="pri" style="margin-top:8px">Enviar ao relógio</button>
+    </div>
+    <div class="bar" id="calBar" hidden><i></i></div>
+    <p class="muted" id="calMsg">No relógio: abra Calendário e deslize para a esquerda.</p>
+    <div id="events"></div>
+  </section>
+
+  <!-- ======================= AJUDA ======================= -->
+  <section id="tab-help">
+    <h2>Como conectar</h2>
+    <ol class="how">
+      <li>⌚ No relógio, abra o app <b>Treinos</b> e toque em <b>Sincronizar</b> — ou abra o <b>Calendário</b> e deslize para a esquerda.</li>
+      <li>📱 Neste app, toque em <b>Conectar</b> e escolha o <b>Amazfit Bip</b> na lista.</li>
+      <li>📱 Use Enviar / Baixar. Ao terminar, aperte o botão do relógio para sair da sincronização.</li>
+    </ol>
+    <div class="hint">No iPhone, use o navegador <b>Bluefy</b> (o Safari não tem Bluetooth para sites). No computador, use o <b>Chrome</b> ou o <b>Edge</b>.</div>
+    <h2>O relógio não aparece na lista?</h2>
+    <ol class="how">
+      <li>📱 O relógio só aparece se <b>nenhum celular</b> estiver conectado a ele: desligue o Bluetooth do iPhone e feche o Gadgetbridge no Samsung (ou desligue o Bluetooth dele).</li>
+      <li>⌚ Acorde o relógio e espere uns 10 segundos.</li>
+      <li>💻 Se ainda não aparecer, procure sem filtro e veja se surge algum "Amazfit" ou "Bip":</li>
+    </ol>
+    <button id="btnConnAll">Procurar todos os dispositivos</button>
+    <h2>Parear</h2>
+    <p class="muted">Se o Registro disser "autenticação falhou", o relógio está com a chave de outro app (o Zepp). Toque abaixo, escolha o relógio e <b>confirme no relógio</b> quando ele pedir. A chave passa a ser a padrão do Gadgetbridge, então ele continua funcionando; o Zepp deixa de conectar.</p>
+    <button id="btnPair" class="pri">Parear este app com o relógio</button>
+    <h2>Chave de autenticação</h2>
+    <p class="muted">Deixe vazio para usar a chave padrão do Gadgetbridge. Se o relógio foi pareado com outra chave, cole aqui os 32 caracteres (0x…).</p>
+    <input id="authKey" placeholder="padrão do Gadgetbridge" autocomplete="off">
+    <h2>Limites</h2>
+    <p class="muted">Até 8 treinos com 40 etapas cada (as repetições contam: 8×(800+200) = 16 etapas). O relógio guarda os últimos 10 resultados. Calendário: 48 compromissos.</p>
+    <h2>Registro</h2>
+    <div class="card"><div id="log"></div></div>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="treinos" class="on"><svg viewBox="0 0 24 24"><path d="M13 4a2 2 0 1 0 0 .1M7 21l3-6 3 2v5M10 15l1-5 4 3 3-1M8 10l3-2"/></svg>Treinos</button>
+  <button data-tab="res"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resultados</button>
+  <button data-tab="cal"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendário</button>
+  <button data-tab="help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5v.1"/></svg>Ajuda</button>
+</nav>
+
+<script>// Porta em JavaScript de tools/treinos.py (parse + build + leitura de resultados).
+// Formato binario: watch/treino_fmt.h. Mantenha os tres em sincronia.
+(function (root) {
+  'use strict';
+  const MAGIC = 0x31525442, VERSION = 1;
+  const MAX_WORKOUTS = 8, MAX_STEPS = 40, MAX_RESULTS = 10, NAME_LEN = 20;
+  const STEP_SIZE = 12, WORKOUT_SIZE = 504, RESULT_SIZE = 340, HEADER_SIZE = 16;
+  const KINDS = ['aquecimento', 'corrida', 'recuperacao', 'desaquecimento', 'educativos'];
+  const GOAL_OPEN = 0, GOAL_TIME = 1, GOAL_DIST = 2;
+
+  const fold = s => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const mmss = sec => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  const parseMmss = s => {
+    s = String(s).trim();
+    if (s.includes(':')) { const [m, x] = s.split(':'); return parseInt(m) * 60 + parseInt(x); }
+    return Math.trunc(parseFloat(s) * 60);
+  };
+  const parsePace = s => {
+    if (!s) return [0, 0];
+    const parts = s.trim().split(/\s*(?:-|a)\s*/);
+    const a = parseMmss(parts[0]), b = parseMmss(parts.slice(1).join('-'));
+    return [Math.min(a, b), Math.max(a, b)];
+  };
+  const title = s => s.replace(/[A-Za-zÀ-ÿ]+/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+  const squash = s => s.split(/\s+/).filter(Boolean).join(' ');
+  const gfmt = v => String(Math.round(v * 1e6) / 1e6);
+
+  const NUM = String.raw`(\d+(?:[.,]\d+)?)`;
+  const QTY_SRC = NUM + String.raw`\s*(km|quil[oô]metros?|metros|mts?|m|minutos|min|segundos|seg|s|'|’|′|"|”)(?![a-zà-ú])`;
+  const qtyRe = (flags = 'gi') => new RegExp(QTY_SRC, flags);
+  const PACE_SRC = String.raw`\(\s*(\d{1,2})\s*:\s*(\d{2})\s*(?:a|-|–|até)\s*(\d{1,2})\s*:\s*(\d{2})\s*\)`;
+  const paceRe = () => new RegExp(PACE_SRC, 'gi');
+  const WORKOUT_RE = /^\s*(\d+)\s*[º°⁰ºo]?\s*\.?\s*treino\b\s*:?\s*(.*)$/i;
+  const WEEK_RE = /(\d+)\s*[ªa°º⁰]?\s*semana/i;
+  const REPEAT_RE = /repet\w*\s*(\d+)\s*x|(\d+)\s*x\s*[:(]/i;
+
+  function searchFrom(re, s, pos) { re.lastIndex = pos; return re.exec(s); }
+
+  function kindFromText(t, def = 'corrida') {
+    const f = fold(t);
+    if (f.includes('desaquec') || f.includes('volta a calma')) return 'desaquecimento';
+    if (f.includes('aquec')) return 'aquecimento';
+    if (/descans|recupera|pausa|trote|caminh/.test(f)) return 'recuperacao';
+    if (/exercic|educativ|coordena|biomecan|drill|alongam|mobilidade/.test(f)) return 'educativos';
+    return def;
+  }
+
+  function qtyToGoal(num, unit) {
+    const v = parseFloat(num.replace(',', '.')), u = fold(unit);
+    if (u === 'km' || u.startsWith('quilo')) return { distancia_m: Math.round(v * 1000) };
+    if (['m', 'mt', 'mts', 'metros'].includes(u)) return { distancia_m: Math.round(v) };
+    if (['s', 'seg', 'segundos', '"', '”'].includes(u)) return { tempo: mmss(Math.round(v)) };
+    return { tempo: mmss(Math.round(v * 60)) };
+  }
+
+  const paceStr = p => `${parseInt(p[1])}:${p[2]}-${parseInt(p[3])}:${p[4]}`;
+
+  function segmentsInLine(line, defKind = 'corrida') {
+    const segs = []; let pos = 0;
+    const firstQ = searchFrom(qtyRe(), line, 0);
+    const lead = searchFrom(paceRe(), line, 0);
+    if (lead && (!firstQ || lead.index < firstQ.index)) {
+      segs.push({ _ritmo_anterior: paceStr(lead), _obs: squash(fold(line.slice(0, lead.index))) });
+      pos = lead.index + lead[0].length;
+    }
+    const all = [...line.matchAll(qtyRe())];
+    for (const q of all) {
+      if (q.index < pos) continue;
+      const qEnd = q.index + q[0].length;
+      const p = searchFrom(paceRe(), line, qEnd);
+      const nxt = searchFrom(qtyRe(), line, qEnd);
+      let end = qEnd, pace = '';
+      if (p && (!nxt || p.index < nxt.index)) { pace = paceStr(p); end = p.index + p[0].length; }
+      const text = line.slice(pos, end);
+      const step = Object.assign({ tipo: kindFromText(text, defKind) }, qtyToGoal(q[1], q[2]));
+      if (pace) step.ritmo = pace;
+      const intensity = squash(fold(line.slice(qEnd, end)).replace(/[()\d:,.]+|\b(a|por|de)\b/g, ' '));
+      if (intensity) step.obs = intensity;
+      segs.push(step);
+      pos = end;
+    }
+    return segs;
+  }
+
+  function parseText(text) {
+    const plan = { plano: '', treinos: [] };
+    let week = 0, cur = null, repeat = null;
+    const closeRepeat = () => { if (repeat && cur && repeat.etapas.length) cur.etapas.push(repeat); repeat = null; };
+    for (let raw of text.split(/\r?\n/)) {
+      raw = raw.trim(); if (!raw) continue;
+      const line = raw.replace(/ /g, ' ');
+      const m = line.match(WORKOUT_RE);
+      if (!m && !cur) {
+        const w = line.match(WEEK_RE);
+        if (w) { week = parseInt(w[1]); plan.plano = squash(line); }
+        continue;
+      }
+      if (m) {
+        closeRepeat();
+        const t = m[2].trim().replace(/^[ :.\-]+|[ :.\-]+$/g, '');
+        cur = { nome: '', semana: week, dia: parseInt(m[1]), etapas: [] };
+        plan.treinos.push(cur);
+        const segs = segmentsInLine(t).filter(x => !('_ritmo_anterior' in x));
+        const q = searchFrom(qtyRe(), t, 0);
+        let base = q ? t.slice(0, q.index).replace(/^[ :\-]+|[ :\-]+$/g, '') : t;
+        base = base || 'Treino';
+        if (segs.length === 1 && segs[0].tipo === 'corrida' && 'distancia_m' in segs[0])
+          cur.nome = `${title(base)} ${gfmt(segs[0].distancia_m / 1000)}km`;
+        else cur.nome = title(base);
+        cur.etapas.push(...segs);
+        continue;
+      }
+      const f = fold(line);
+      const r = line.match(REPEAT_RE);
+      if (r) {
+        closeRepeat();
+        repeat = { repetir: parseInt(r[1] || r[2]), etapas: [] };
+        const rest = line.slice(r.index + r[0].length).replace(/^[ :]+|[ :]+$/g, '');
+        if (rest) repeat.etapas.push(...segmentsInLine(rest).filter(x => !('_ritmo_anterior' in x)));
+        continue;
+      }
+      if (/^treino\s*:/.test(f) && !searchFrom(paceRe(), line, 0)) continue;
+      const segs = segmentsInLine(line);
+      const target = repeat ? repeat.etapas : cur.etapas;
+      if (segs.length && '_ritmo_anterior' in segs[0]) {
+        const lead = segs.shift();
+        if (target.length && !('ritmo' in target[target.length - 1])) {
+          target[target.length - 1].ritmo = lead._ritmo_anterior;
+          if (lead._obs) target[target.length - 1].obs = lead._obs;
+        }
+      }
+      const isEdge = /aquec|desaquec/.test(f);
+      if (repeat && isEdge) closeRepeat();
+      if (!segs.length) {
+        if (kindFromText(line, '') === 'educativos') {
+          closeRepeat();
+          cur.etapas.push({ tipo: 'educativos', livre: true, obs: squash(line).slice(0, 60) });
+        }
+        continue;
+      }
+      (repeat ? repeat.etapas : cur.etapas).push(...segs);
+    }
+    closeRepeat();
+    for (const t of plan.treinos) {
+      const reps = t.etapas.filter(e => 'repetir' in e);
+      if (reps.length && !/\d/.test(t.nome)) {
+        const r0 = reps[0], main = r0.etapas.find(e => e.tipo === 'corrida');
+        if (main && 'distancia_m' in main) t.nome = `${t.nome} ${r0.repetir}x${main.distancia_m}`;
+        else if (main) t.nome = `${t.nome} ${r0.repetir}x${main.tempo}`;
+      }
+    }
+    return plan;
+  }
+
+  function stepFromJson(e, repIdx = 0, repTotal = 0) {
+    const kind = Math.max(0, KINDS.indexOf(e.tipo || 'corrida'));
+    let goal = GOAL_OPEN, value = 0;
+    if (e.livre) { /* aberto */ }
+    else if ('distancia_m' in e) { goal = GOAL_DIST; value = parseInt(e.distancia_m); }
+    else if ('tempo' in e) { goal = GOAL_TIME; value = parseMmss(e.tempo); }
+    const [fast, slow] = parsePace(e.ritmo);
+    return { kind, goal, repIdx, repTotal, value, fast, slow };
+  }
+
+  function expand(etapas) {
+    const out = [];
+    for (const e of etapas) {
+      if ('repetir' in e) {
+        const n = parseInt(e.repetir);
+        for (let i = 1; i <= n; i++) for (const s of e.etapas) out.push(stepFromJson(s, i, n));
+      } else out.push(stepFromJson(e));
+    }
+    return out;
+  }
+
+  function truncUtf8(s, n) {
+    const enc = new TextEncoder(); let b = enc.encode(s);
+    while (b.length > n) { s = [...s].slice(0, -1).join(''); b = enc.encode(s); }
+    return b;
+  }
+
+  /** um treino (objeto JSON) -> Uint8Array de 504 bytes (workout_t) */
+  function workoutBytes(t, i = 0) {
+    const steps = expand(t.etapas);
+    if (!steps.length) throw new Error(`treino '${t.nome}' sem etapas`);
+    if (steps.length > MAX_STEPS) throw new Error(`treino '${t.nome}' tem ${steps.length} etapas (máximo ${MAX_STEPS})`);
+    const b = new Uint8Array(WORKOUT_SIZE), dv = new DataView(b.buffer);
+    b.set(truncUtf8(t.nome, NAME_LEN - 1), 0);
+    b[20] = steps.length; b[21] = (t.semana || 0) & 255; b[22] = (t.dia || i + 1) & 255;
+    steps.forEach((s, k) => {
+      const o = 24 + k * STEP_SIZE;
+      b[o] = s.kind; b[o + 1] = s.goal; b[o + 2] = s.repIdx; b[o + 3] = s.repTotal;
+      dv.setUint32(o + 4, s.value, true); dv.setUint16(o + 8, s.fast, true); dv.setUint16(o + 10, s.slow, true);
+    });
+    return b;
+  }
+
+  function readHeader(b) {
+    const dv = new DataView(b.buffer, b.byteOffset);
+    if (dv.getUint32(0, true) !== MAGIC) return null;
+    return { version: b[4], n_workouts: b[5], n_results: b[6], next_result: b[7] };
+  }
+
+  function readResult(b) {
+    const dv = new DataView(b.buffer, b.byteOffset);
+    const r = { workout: b[0], n: b[1], flags: b[2], max_hr: b[3], start: dv.getUint32(4, true),
+      time: dv.getUint32(8, true), dist: dv.getUint32(12, true), avg_hr: b[16], steps: [] };
+    for (let k = 0; k < Math.min(r.n, MAX_STEPS); k++) {
+      const o = 20 + k * 8;
+      r.steps.push({ time: dv.getUint16(o, true), dist: dv.getUint16(o + 2, true), pace: dv.getUint16(o + 4, true),
+        hr: b[o + 6], zone: b[o + 7] });
+    }
+    return r;
+  }
+
+  function describeStep(e) {
+    const k = { aquecimento: 'Aquecer', corrida: 'Correr', recuperacao: 'Recuperar', desaquecimento: 'Desaquecer', educativos: 'Educativos' }[e.tipo] || e.tipo;
+    let q = e.livre ? 'livre' : ('distancia_m' in e ? (e.distancia_m >= 1000 ? gfmt(e.distancia_m / 1000) + ' km' : e.distancia_m + ' m') : (e.tempo || 'livre'));
+    return `${k} ${q}${e.ritmo ? ' @ ' + e.ritmo.replace('-', '–') : ''}`;
+  }
+
+  root.Treinos = { MAGIC, VERSION, MAX_WORKOUTS, MAX_STEPS, MAX_RESULTS, WORKOUT_SIZE, RESULT_SIZE, HEADER_SIZE,
+    KINDS, parseText, expand, workoutBytes, readHeader, readResult, describeStep, mmss, parsePace };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('bip.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('bip.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+const log = (...a) => { const el = $('#log'); el.textContent += a.join(' ') + '\n'; el.scrollTop = 1e9; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------------------------------------------------------------- abas */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + b.dataset.tab));
+  window.scrollTo(0, 0);
+});
+
+/* ---------------------------------------------------------------- Bluetooth */
+const SVC = '00003802-0000-1000-8000-00805f9b34fb';
+const ble = { dev: null, ch: null, waiters: [], busy: false };
+
+function setConn(on, txt) {
+  $('#dot').classList.toggle('on', on);
+  $('#status').textContent = txt || (on ? 'conectado' : 'desconectado');
+  $('#btnConn').textContent = on ? 'Sair' : 'Conectar';
+  $('#btnConn').classList.toggle('pri', !on);
+}
+
+if (!navigator.bluetooth) {
+  const h = $('#btHint'); h.hidden = false; h.classList.add('err');
+  h.innerHTML = 'Este navegador não tem Bluetooth para sites. No iPhone, abra este endereço no app <b>Bluefy</b>; no computador, use Chrome ou Edge. Você ainda pode interpretar e conferir os treinos aqui.';
+}
+
+$('#btnConn').onclick = () => connect(false);
+$('#btnConnAll').onclick = () => connect(true);
+$('#btnPair').onclick = () => connect(false, true);
+
+/* autenticacao Huami (Bip original): sem ela o relogio ignora os dados e derruba a conexao */
+const AUTH_SVC = '0000fee1-0000-1000-8000-00805f9b34fb';
+const AUTH_CHR = '00000009-0000-3512-2118-0009af100700';
+const DEFAULT_KEY = '0123456789@ABCDE';           // chave fixa que o Gadgetbridge grava ao parear o Bip
+const hex = v => Array.from(v, x => x.toString(16).padStart(2, '0')).join(' ');
+const keyBytes = () => {
+  const k = (store.get('authkey', '') || '').replace(/^0x/i, '').trim();
+  if (/^[0-9a-f]{32}$/i.test(k)) return Uint8Array.from(k.match(/../g).map(x => parseInt(x, 16)));
+  return new TextEncoder().encode(DEFAULT_KEY);
+};
+
+async function huamiAuth(srv, pair = false) {
+  const flag = 0x08;
+  let c;
+  try { c = await (await srv.getPrimaryService(AUTH_SVC)).getCharacteristic(AUTH_CHR); }
+  catch (e) { log('autenticação: serviço não encontrado (' + e.message + ')'); return false; }
+  let pending = null;
+  c.addEventListener('characteristicvaluechanged', e => { const v = new Uint8Array(e.target.value.buffer.slice(0)); if (pending) { const p = pending; pending = null; p(v); } });
+  await c.startNotifications();
+  const send = (bytes) => new Promise(async res => {
+    const t = setTimeout(() => { pending = null; res(null); }, 4000);
+    pending = v => { clearTimeout(t); res(v); };
+    await c.writeValue(Uint8Array.from(bytes));
+  });
+  if (pair) {                                       // grava a chave no relogio (precisa tocar na tela do relogio)
+    log('pareamento: toque no relógio para confirmar…');
+    setConn(false, 'toque no relógio ✓');
+    const r0 = await new Promise(async res => {
+      const t = setTimeout(() => { pending = null; res(null); }, 30000);
+      pending = v => { clearTimeout(t); res(v); };
+      await c.writeValue(Uint8Array.from([0x01, flag, ...keyBytes()]));
+    });
+    log('pareamento ->', r0 ? hex(r0) : 'sem resposta');
+    if (!r0 || r0[1] !== 0x01 || r0[2] !== 0x01) return false;
+  }
+  for (const f of [flag, flag === 0x08 ? 0x00 : 0x08]) {   // Bip original usa 0x08 (como o Gadgetbridge)
+    const r1 = await send([0x02, f]);
+    log('autenticação (' + f + '): pedido ->', r1 ? hex(r1) : 'sem resposta');
+    if (!r1 || r1[0] !== 0x10 || r1[1] !== 0x02 || r1[2] !== 0x01) continue;
+    const key = await crypto.subtle.importKey('raw', keyBytes(), 'AES-CBC', false, ['encrypt']);
+    const enc = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv: new Uint8Array(16) }, key, r1.slice(3, 19))).slice(0, 16);
+    const r2 = await send([0x03, f, ...enc]);
+    log('autenticação (' + f + '): resposta ->', r2 ? hex(r2) : 'sem resposta');
+    if (r2 && r2[0] === 0x10 && r2[1] === 0x03 && r2[2] === 0x01) return true;
+  }
+  return false;
+}
+
+let wantConnected = false;
+async function openLink(pair = false) {
+  setConn(false, 'conectando…');
+  const srv = await ble.dev.gatt.connect();
+  let ok = await huamiAuth(srv, pair);
+  if (!ok && !pair) { log('autenticação falhou — pareando (confirme no relógio)'); ok = await huamiAuth(srv, true); }
+  log(ok ? 'autenticado ✓' : 'autenticação falhou mesmo após parear');
+  $('#btnPair').hidden = ok;
+  const svc = await srv.getPrimaryService(SVC);
+  const chars = await svc.getCharacteristics();
+  log('características:', chars.map(c => c.uuid.slice(4, 8) + '[' + ['read', 'write', 'writeWithoutResponse', 'notify'].filter(p => c.properties[p]).join(',') + ']').join(' '));
+  const chr = chars.find(c => c.properties.notify && (c.properties.write || c.properties.writeWithoutResponse));
+  if (!chr) throw new Error('canal de dados não encontrado');
+  chr.addEventListener('characteristicvaluechanged', e => {
+    const v = new Uint8Array(e.target.value.buffer.slice(0));
+    const w = ble.waiters.shift(); if (w) w(v); else log('recebido:', hex(v));
+  });
+  await chr.startNotifications();
+  ble.ch = chr;
+  setConn(true, ok ? 'conectado' : 'conectado (sem autenticar)');
+  log('conectado a', ble.dev.name);
+  detectApp();
+}
+
+async function connect(all, pair = false) {
+  if (!pair && ble.dev && ble.dev.gatt.connected) { wantConnected = false; ble.dev.gatt.disconnect(); return; }
+  if (pair && ble.dev) { try { wantConnected = false; ble.dev.gatt.disconnect(); } catch (e) {} await sleep(500); }
+  try {
+    setConn(false, 'procurando…');
+    const dev = await navigator.bluetooth.requestDevice(all
+      ? { acceptAllDevices: true, optionalServices: [SVC, AUTH_SVC] }
+      : { filters: [{ namePrefix: 'Amazfit' }, { namePrefix: 'Bip' }, { namePrefix: 'Mili' }, { services: [SVC] }],
+          optionalServices: [SVC, AUTH_SVC] });
+    if (dev !== ble.dev) {
+      dev.addEventListener('gattserverdisconnected', async () => {
+        ble.ch = null; setConn(false); log('desconectado');
+        if (wantConnected && !ble.retrying) {            // tenta voltar sozinho uma vez
+          ble.retrying = true;
+          try { await sleep(800); await openLink(); log('reconectado'); } catch (e) { log('não reconectou:', e.message); }
+          ble.retrying = false;
+        }
+      });
+    }
+    ble.dev = dev; wantConnected = true;
+    await openLink(pair);
+  } catch (e) {
+    setConn(false); log('erro:', e.message);
+    if (e.name !== 'NotFoundError') alert('Não conectou: ' + e.message);
+  }
+}
+
+async function rawWrite(bytes) {
+  if (!ble.ch) throw new Error('desconectado — toque em Conectar de novo');
+  if (ble.ch.properties.writeWithoutResponse && ble.ch.writeValueWithoutResponse) return ble.ch.writeValueWithoutResponse(bytes);
+  if (ble.ch.writeValueWithResponse) return ble.ch.writeValueWithResponse(bytes);
+  return ble.ch.writeValue(bytes);
+}
+
+/** envia um quadro (<=20 bytes) e espera a resposta cujo 1o byte e `expect` */
+async function req(bytes, expect, timeout = 1500, tries = 3) {
+  if (!ble.ch) throw new Error('conecte o relógio primeiro');
+  for (let t = 0; t < tries; t++) {
+    ble.waiters = [];
+    const p = new Promise(res => {
+      const timer = setTimeout(() => res(null), timeout);
+      const want = v => { if (v[0] === expect) { clearTimeout(timer); res(v); } else ble.waiters.unshift(want); };
+      ble.waiters.push(want);
+    });
+    await rawWrite(Uint8Array.from(bytes));
+    const v = await p;
+    if (v) return v;
+    log('sem resposta para', String.fromCharCode(bytes[0]), '— tentando de novo');
+  }
+  throw new Error('o relógio não respondeu. Ele está na tela de sincronização?');
+}
+const ch = c => c.charCodeAt(0);
+
+async function detectApp() {
+  try { const v = await req([ch('H')], ch('h'), 700, 1); const h = Treinos.readHeader(v.subarray(1));
+        setConn(true, 'Treinos ✓'); log('app Treinos:', JSON.stringify(h)); return 'treinos'; } catch (e) {}
+  try { const v = await req([ch('G')], ch('g'), 700, 1); setConn(true, 'Calendário ✓'); log('app Calendário, eventos:', v[5]); return 'cal'; } catch (e) {}
+  setConn(true, 'abra a sincronização no relógio');
+  return null;
+}
+
+function progress(sel, frac) { const b = $(sel); b.hidden = frac == null; if (frac != null) b.firstElementChild.style.width = (frac * 100).toFixed(1) + '%'; }
+
+/* ---------------------------------------------------------------- treinos */
+let plan = store.get('plan', null);
+$('#coach').value = store.get('coach', '');
+
+function renderStepsHtml(etapas) {
+  return etapas.map(e => 'repetir' in e
+    ? `<li class="rep">Repetir ${e.repetir}×<ul class="steps">${renderStepsHtml(e.etapas)}</ul></li>`
+    : `<li>${esc(Treinos.describeStep(e))}${e.obs ? ' <span class="muted">· ' + esc(e.obs) + '</span>' : ''}</li>`).join('');
+}
+
+function renderPlan() {
+  const el = $('#plan');
+  if (!plan || !plan.treinos.length) { el.innerHTML = '<p class="muted">Nenhum treino ainda. Cole o texto e toque em Interpretar.</p>'; $('#btnSend').disabled = true; return; }
+  $('#planTitle').textContent = plan.plano ? plan.plano : 'Treinos';
+  el.innerHTML = plan.treinos.map((t, i) => {
+    let n = 0, err = '';
+    try { n = Treinos.expand(t.etapas).length; Treinos.workoutBytes(t, i); } catch (e) { err = e.message; }
+    return `<div class="card">
+      <div class="row"><input class="grow" data-name="${i}" value="${esc(t.nome)}" maxlength="19" aria-label="Nome do treino">
+        <button class="ghost" data-del="${i}" aria-label="Remover">✕</button></div>
+      <ul class="steps">${renderStepsHtml(t.etapas)}</ul>
+      <p class="muted" style="margin:6px 0 0">${n} etapas no relógio${err ? ' · <span style="color:var(--err)">' + esc(err) + '</span>' : ''}</p>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-name]').forEach(inp => inp.onchange = () => { plan.treinos[+inp.dataset.name].nome = inp.value; store.set('plan', plan); });
+  el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { plan.treinos.splice(+b.dataset.del, 1); store.set('plan', plan); renderPlan(); });
+  $('#btnSend').disabled = plan.treinos.length > Treinos.MAX_WORKOUTS;
+  if (plan.treinos.length > Treinos.MAX_WORKOUTS) $('#sendMsg').textContent = `Máximo de ${Treinos.MAX_WORKOUTS} treinos — remova alguns.`;
+}
+
+$('#btnParse').onclick = () => {
+  const txt = $('#coach').value; store.set('coach', txt);
+  plan = Treinos.parseText(txt); store.set('plan', plan);
+  $('#sendMsg').textContent = plan.treinos.length ? `${plan.treinos.length} treino(s) encontrados. Confira antes de enviar.` : 'Não encontrei treinos. Cada treino deve começar com "1º treino:", "2º treino:"…';
+  renderPlan();
+};
+
+$('#btnSend').onclick = async () => {
+  const btn = $('#btnSend'); btn.disabled = true;
+  try {
+    const blobs = plan.treinos.map((t, i) => Treinos.workoutBytes(t, i));
+    const total = blobs.length * 32 + 1; let done = 0;
+    for (let i = 0; i < blobs.length; i++) {
+      for (let ofs = 0; ofs < Treinos.WORKOUT_SIZE; ofs += 16) {
+        const part = blobs[i].subarray(ofs, ofs + 16);
+        await req([ch('W'), i, ofs & 255, ofs >> 8, ...part], ch('w'));
+        progress('#sendBar', ++done / total);
+        $('#sendMsg').textContent = `Enviando ${plan.treinos[i].nome}…`;
+      }
+      const c = await req([ch('C'), i], ch('c'));
+      if (!c[2]) throw new Error(`o relógio recusou o treino ${i + 1}`);
+    }
+    await req([ch('N'), blobs.length], ch('n'));
+    progress('#sendBar', 1);
+    store.set('names', plan.treinos.map(t => t.nome));
+    $('#sendMsg').textContent = `✓ ${blobs.length} treino(s) no relógio. Aperte o botão do relógio para sair.`;
+  } catch (e) { $('#sendMsg').textContent = '✗ ' + e.message; log('erro:', e.message); }
+  btn.disabled = false;
+};
+
+/* ---------------------------------------------------------------- resultados */
+let results = store.get('results', []);
+const fmtTime = s => s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : Treinos.mmss(s);
+const fmtPace = (t, d) => d >= 100 ? Treinos.mmss(Math.round(t * 1000 / d)) : '–';
+const KIND_LABEL = ['Aquec.', 'Corrida', 'Recup.', 'Desaq.', 'Educ.'];
+
+function renderResults() {
+  const el = $('#results');
+  $('#btnCsv').disabled = !results.length; $('#btnClear').hidden = !results.length;
+  if (!results.length) { el.innerHTML = ''; return; }
+  el.innerHTML = results.slice().reverse().map(r => {
+    const d = new Date(r.start * 1000);   // hora local do relogio gravada como se fosse UTC
+    const when = d.toLocaleDateString('pt-BR', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short' }) + ' ' +
+                 d.toLocaleTimeString('pt-BR', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' });
+    return `<div class="card">
+      <div class="row"><b class="grow">${esc(r.name)}</b><span class="tag ${r.flags & 1 ? 'ok' : 'stop'}">${r.flags & 1 ? 'completo' : 'encerrado antes'}</span></div>
+      <div class="muted">${when}</div>
+      <div class="kpis">
+        <div><b>${(r.dist / 1000).toFixed(2)}</b><span>km</span></div>
+        <div><b>${fmtTime(r.time)}</b><span>tempo</span></div>
+        <div><b>${fmtPace(r.time, r.dist)}</b><span>min/km</span></div>
+        <div><b>${r.avg_hr || '–'}</b><span>FC méd.</span></div>
+      </div>
+      <details><summary class="muted" style="margin-top:8px">Etapas (${r.steps.length})</summary>
+      <table><tr><th>#</th><th>dist</th><th>tempo</th><th>ritmo</th><th>FC</th><th>no alvo</th></tr>
+      ${r.steps.map((s, k) => `<tr><td>${k + 1}${r.kinds && r.kinds[k] != null ? ' ' + KIND_LABEL[r.kinds[k]] : ''}</td><td>${s.dist} m</td><td>${Treinos.mmss(s.time)}</td>
+        <td>${s.pace ? Treinos.mmss(s.pace) : '–'}</td><td>${s.hr || '–'}</td><td>${s.pace ? s.zone + '%' : '–'}</td></tr>`).join('')}
+      </table></details></div>`;
+  }).join('');
+}
+
+$('#btnRead').onclick = async () => {
+  const btn = $('#btnRead'); btn.disabled = true;
+  try {
+    const h = Treinos.readHeader((await req([ch('H')], ch('h'))).subarray(1));
+    if (!h) throw new Error('o app Treinos ainda não tem dados');
+    const names = store.get('names', []);
+    const out = [];
+    const per = Math.ceil(Treinos.RESULT_SIZE / 16);
+    for (let idx = 0; idx < h.n_results; idx++) {
+      const buf = new Uint8Array(Treinos.RESULT_SIZE);
+      for (let ofs = 0; ofs < Treinos.RESULT_SIZE; ofs += 16) {
+        const n = Math.min(16, Treinos.RESULT_SIZE - ofs);
+        const v = await req([ch('R'), idx, ofs & 255, ofs >> 8, n], ch('r'));
+        buf.set(v.subarray(4, 4 + n), ofs);
+        progress('#readBar', (idx * per + ofs / 16 + 1) / (h.n_results * per));
+      }
+      const r = Treinos.readResult(buf);
+      r.name = names[r.workout] || `Treino ${r.workout + 1}`;
+      out.push(r);
+      $('#readMsg').textContent = `Lendo ${idx + 1}/${h.n_results}…`;
+    }
+    // junta com o que ja estava salvo (sem duplicar pelo horario de inicio)
+    const seen = new Set(results.map(r => r.start));
+    for (const r of out) if (!seen.has(r.start)) results.push(r);
+    results.sort((a, b) => a.start - b.start);
+    store.set('results', results);
+    $('#readMsg').textContent = `✓ ${out.length} resultado(s) lidos do relógio.`;
+    progress('#readBar', null);
+    renderResults();
+  } catch (e) { $('#readMsg').textContent = '✗ ' + e.message; log('erro:', e.message); }
+  btn.disabled = false;
+};
+
+$('#btnCsv').onclick = () => {
+  const rows = [['data', 'treino', 'completo', 'etapa', 'distancia_m', 'tempo_s', 'ritmo', 'fc_media', 'pct_no_alvo']];
+  for (const r of results) {
+    const d = new Date(r.start * 1000).toISOString().slice(0, 16).replace('T', ' ');
+    rows.push([d, r.name, r.flags & 1 ? 'sim' : 'nao', 'total', r.dist, r.time, fmtPace(r.time, r.dist), r.avg_hr, '']);
+    r.steps.forEach((s, k) => rows.push([d, r.name, '', k + 1, s.dist, s.time, s.pace ? Treinos.mmss(s.pace) : '', s.hr, s.zone]));
+  }
+  const csv = rows.map(r => r.map(x => /[",;\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : x).join(';')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+  a.download = 'treinos_bip.csv'; a.click();
+};
+
+$('#btnClear').onclick = async () => {
+  if (!confirm('Apagar o histórico guardado no relógio? (o que já foi baixado continua aqui)')) return;
+  try { await req([ch('X')], ch('x')); $('#readMsg').textContent = '✓ Histórico do relógio apagado.'; }
+  catch (e) { $('#readMsg').textContent = '✗ ' + e.message; }
+};
+
+/* ---------------------------------------------------------------- calendario */
+let events = store.get('events', []);
+const COLORS = ['#ffffff', '#3ddc84', '#f5c542', '#4fb3ff'];
+const todayIso = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+$('#evDate').value = todayIso();
+
+function upcoming() {
+  const cut = new Date(); cut.setDate(cut.getDate() - 7);
+  const c = cut.toISOString().slice(0, 10);
+  return events.filter(e => e.date >= c).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+}
+
+function renderEvents() {
+  const list = upcoming();
+  $('#evCount').textContent = Math.min(list.length, 48);
+  $('#events').innerHTML = list.length ? list.map((e, i) => {
+    const d = new Date(e.date + 'T12:00');
+    return `<div class="card row" style="${i >= 48 ? 'opacity:.4' : ''}">
+      <span class="ev-dot" style="background:${COLORS[e.color]}"></span>
+      <div class="grow"><b>${esc(e.title)}</b><div class="muted">${d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })} · ${e.time || 'dia todo'}</div></div>
+      <button class="ghost" data-ev="${e.id}" aria-label="Remover">✕</button></div>`;
+  }).join('') : '<p class="muted">Sem compromissos.</p>';
+  document.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => { events = events.filter(e => e.id != b.dataset.ev); store.set('events', events); renderEvents(); });
+}
+
+$('#btnAddEv').onclick = () => {
+  const title = $('#evTitle').value.trim(); if (!title || !$('#evDate').value) return;
+  events.push({ id: Date.now(), title, date: $('#evDate').value, time: $('#evTime').value || '', color: +$('#evColor').value });
+  store.set('events', events); $('#evTitle').value = ''; renderEvents();
+};
+
+$('#btnPlanEv').onclick = () => {
+  if (!plan || !plan.treinos.length) { alert('Interprete os treinos primeiro (aba Treinos).'); return; }
+  // distribui os treinos a partir de amanha, um dia sim outro nao
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  plan.treinos.forEach((t, i) => {
+    const x = new Date(d); x.setDate(d.getDate() + i * 2);
+    x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
+    events.push({ id: Date.now() + i, title: t.nome.slice(0, 23), date: x.toISOString().slice(0, 10), time: '', color: 1 });
+  });
+  store.set('events', events); renderEvents();
+};
+
+function truncBytes(s, n) { const enc = new TextEncoder(); let b = enc.encode(s); while (b.length > n) { s = [...s].slice(0, -1).join(''); b = enc.encode(s); } return b; }
+
+function calImage() {
+  const list = upcoming().slice(0, 48);
+  const img = new Uint8Array(16 + 48 * 32), dv = new DataView(img.buffer);
+  dv.setUint32(0, 0x314C4143, true); img[4] = 1; img[5] = list.length;
+  list.forEach((e, i) => {
+    const o = 16 + i * 32, [y, m, d] = e.date.split('-').map(Number);
+    dv.setUint16(o, y, true); img[o + 2] = m; img[o + 3] = d;
+    if (e.time) { const [hh, mm] = e.time.split(':').map(Number); img[o + 4] = hh; img[o + 5] = mm; } else { img[o + 4] = 255; }
+    img[o + 6] = e.color & 3;
+    img.set(truncBytes(e.title, 23), o + 8);
+  });
+  return img;
+}
+
+$('#btnSendCal').onclick = async () => {
+  const btn = $('#btnSendCal'); btn.disabled = true;
+  try {
+    const img = calImage(), CH = 17, n = Math.ceil(img.length / CH);
+    for (let k = 0, ofs = 0; ofs < img.length; ofs += CH, k++) {
+      await req([ch('E'), ofs & 255, ofs >> 8, ...img.subarray(ofs, ofs + CH)], ch('e'));
+      progress('#calBar', (k + 1) / (n + 1));
+    }
+    const s = await req([ch('S')], ch('s'));
+    if (!s[1]) throw new Error('o relógio recusou os dados');
+    progress('#calBar', 1);
+    $('#calMsg').textContent = `✓ ${img[5]} compromisso(s) no relógio. Aperte o botão para voltar à semana.`;
+  } catch (e) { $('#calMsg').textContent = '✗ ' + e.message; log('erro:', e.message); }
+  btn.disabled = false;
+};
+
+$('#authKey').value = store.get('authkey', '');
+$('#authKey').onchange = () => store.set('authkey', $('#authKey').value.trim());
+renderPlan(); renderResults(); renderEvents();
+</script>
+</body>
+</html>
