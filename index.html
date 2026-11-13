@@ -148,6 +148,16 @@
     <div class="card" id="stepsWeek"><p class="muted">Sem dados ainda.</p></div>
   </section>
 
+  <section id="tab-inst">
+    <div class="hint">Mesma instalação do Gadgetbridge. Ordem quando houver mais de um: <b>firmware → recursos → fonte</b>. Deixe o relógio perto e a tela do computador/celular ligada até terminar.</div>
+    <label for="instFile">Arquivo (.fw, .res ou .ft)</label>
+    <input id="instFile" type="file" accept=".fw,.res,.ft,.bin">
+    <div class="card" id="instInfo" hidden></div>
+    <button id="btnInst" class="pri" style="width:100%;margin-top:8px" disabled>Instalar no relógio</button>
+    <div class="bar" id="instBar" hidden><i></i></div>
+    <p class="muted" id="instMsg"></p>
+  </section>
+
   <section id="tab-help">
     <h2>Como conectar</h2>
     <ol class="how">
@@ -181,6 +191,7 @@
   <button data-tab="res"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resultados</button>
   <button data-tab="cal"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendário</button>
   <button data-tab="sono"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Sono</button>
+  <button data-tab="inst"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>Instalar</button>
   <button data-tab="help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5v.1"/></svg>Ajuda</button>
 </nav>
 
@@ -562,6 +573,102 @@ async function fetchActivity(since, onProgress) {
   }
 }
 
+/* ---------------------------------------------------------------- instalar (.fw / .res / .ft) */
+const FW_SVC = '00001530-0000-3512-2118-0009af100700';
+const FW_CTL = '00001531-0000-3512-2118-0009af100700';
+const FW_DATA = '00001532-0000-3512-2118-0009af100700';
+const FW_TYPES = { fw: { code: 0, name: 'Firmware' }, ft: { code: 1, name: 'Fonte' }, res: { code: 2, name: 'Recursos' } };
+let instBlob = null, instKind = null;
+
+function crc16(b) {                       // CRC-16/CCITT-FALSE (o mesmo do Gadgetbridge)
+  let crc = 0xffff;
+  for (let i = 0; i < b.length; i++) {
+    crc = ((crc >>> 8) | (crc << 8)) & 0xffff;
+    crc ^= b[i];
+    crc ^= (crc & 0xff) >> 4;
+    crc ^= (crc << 12) & 0xffff;
+    crc ^= ((crc & 0xff) << 5) & 0xffff;
+  }
+  return crc & 0xffff;
+}
+function detectKind(b, name) {
+  const t = String.fromCharCode(...b.subarray(0, 5));
+  if (t === 'NERES') return 'res';
+  if (t.startsWith('NEZK')) return 'ft';
+  if (b[3] === 0x20 && b[7] === 0x08 && b.length > 300000 && b.length < 700000) return 'fw';   // tabela de vetores ARM
+  return null;
+}
+
+$('#instFile').onchange = async () => {
+  const f = $('#instFile').files[0]; instBlob = null; instKind = null;
+  $('#btnInst').disabled = true; $('#instMsg').textContent = '';
+  if (!f) { $('#instInfo').hidden = true; return; }
+  const b = new Uint8Array(await f.arrayBuffer());
+  const k = detectKind(b, f.name);
+  const info = $('#instInfo'); info.hidden = false;
+  if (!k) { info.innerHTML = `<b>${esc(f.name)}</b><div class="muted" style="color:var(--err)">Não reconheci este arquivo como firmware, recursos ou fonte do Bip.</div>`; return; }
+  instBlob = b; instKind = k;
+  info.innerHTML = `<b>${esc(f.name)}</b><div class="muted">${FW_TYPES[k].name} · ${(b.length / 1024).toFixed(0)} KB · CRC ${crc16(b).toString(16).padStart(4, '0')}</div>` +
+    (k === 'fw' ? '<div class="muted" style="color:var(--warn);margin-top:6px">Firmware: se a transferência cair no meio, o relógio fica esperando um firmware novo (dá para reinstalar pelo Gadgetbridge). Depois dele, instale os recursos e a fonte.</div>' : '');
+  $('#btnInst').disabled = false;
+};
+
+$('#btnInst').onclick = async () => {
+  if (!instBlob) return;
+  const btn = $('#btnInst'); btn.disabled = true;
+  const msg = t => { $('#instMsg').textContent = t; };
+  try {
+    if (!ble.srv || !ble.dev.gatt.connected) throw new Error('conecte o relógio primeiro');
+    if (!ble.authOk) throw new Error('o relógio não autenticou — reconecte');
+    if (instKind === 'fw' && !confirm('Instalar o FIRMWARE agora? Não feche esta página nem afaste o relógio até terminar.')) { btn.disabled = false; return; }
+    const svc = await ble.srv.getPrimaryService(FW_SVC);
+    const ctl = await svc.getCharacteristic(FW_CTL), data = await svc.getCharacteristic(FW_DATA);
+    const waiters = [];
+    const onCtl = e => { const v = new Uint8Array(e.target.value.buffer.slice(0)); log('instalar ctl:', hex(v)); const w = waiters.shift(); if (w) w(v); };
+    ctl.addEventListener('characteristicvaluechanged', onCtl);
+    await ctl.startNotifications();
+    const expect = (cmd, ms) => new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('o relógio não respondeu (etapa ' + cmd + ')')), ms);
+      waiters.push(v => { clearTimeout(t); if (v[0] === 0x10 && v[1] === cmd && v[2] === 0x01) res(v); else rej(new Error('o relógio recusou (etapa ' + cmd + ': ' + hex(v) + ')')); });
+    });
+    const b = instBlob, n = b.length, type = FW_TYPES[instKind].code;
+    try {
+      // 1) informa tamanho e tipo
+      msg('Preparando…'); progress('#instBar', 0);
+      const init = [0x01, n & 255, (n >> 8) & 255, (n >> 16) & 255];
+      if (type !== 0) init.push(type);
+      let p = expect(0x01, 8000); await ctl.writeValue(Uint8Array.from(init)); await p;
+      // 2) dados
+      await ctl.writeValue(Uint8Array.of(0x03));
+      const PK = 20, t0 = Date.now();
+      for (let ofs = 0, i = 0; ofs < n; ofs += PK, i++) {
+        const chunk = b.subarray(ofs, Math.min(n, ofs + PK));
+        if (data.writeValueWithoutResponse) await data.writeValueWithoutResponse(chunk); else await data.writeValue(chunk);
+        if (i > 0 && i % 100 === 0) {
+          await ctl.writeValue(Uint8Array.of(0x00));
+          progress('#instBar', ofs / n);
+          const kbs = ofs / 1024 / ((Date.now() - t0) / 1000);
+          msg(`Enviando ${(ofs / 1024).toFixed(0)} / ${(n / 1024).toFixed(0)} KB · ${kbs.toFixed(1)} KB/s`);
+        }
+      }
+      // 3) fim + conferencia
+      msg('Conferindo…');
+      p = expect(0x00, 20000); await ctl.writeValue(Uint8Array.of(0x00)); await p;
+      const crc = crc16(b);
+      p = expect(0x04, 20000); await ctl.writeValue(Uint8Array.of(0x04, crc & 255, crc >> 8)); await p;
+      progress('#instBar', 1);
+      if (type === 0) {
+        await ctl.writeValue(Uint8Array.of(0x05)).catch(() => {});
+        msg('✓ Firmware instalado. O relógio vai reiniciar — depois reconecte e instale os recursos e a fonte.');
+      } else msg(`✓ Instalado: ${FW_TYPES[instKind].name}.`);
+    } finally {
+      ctl.removeEventListener('characteristicvaluechanged', onCtl);
+      try { await ctl.stopNotifications(); } catch (e) {}
+    }
+  } catch (e) { msg('✗ ' + e.message); log('erro instalar:', e.message); }
+  btn.disabled = false;
+};
+
 let wantConnected = false;
 async function openLink(pair = false) {
   setConn(false, 'conectando…');
@@ -594,9 +701,9 @@ async function connect(all, pair = false) {
   try {
     setConn(false, 'procurando…');
     const dev = await navigator.bluetooth.requestDevice(all
-      ? { acceptAllDevices: true, optionalServices: [SVC, AUTH_SVC, MI_SVC] }
+      ? { acceptAllDevices: true, optionalServices: [SVC, AUTH_SVC, MI_SVC, FW_SVC] }
       : { filters: [{ namePrefix: 'Amazfit' }, { namePrefix: 'Bip' }, { namePrefix: 'Mili' }, { services: [SVC] }],
-          optionalServices: [SVC, AUTH_SVC, MI_SVC] });
+          optionalServices: [SVC, AUTH_SVC, MI_SVC, FW_SVC] });
     if (dev !== ble.dev) {
       dev.addEventListener('gattserverdisconnected', async () => {
         ble.ch = null; setConn(false); log('desconectado');
@@ -896,16 +1003,42 @@ function mergeAct(act, start, samples) {
 // tipo bruto do Bip: (tipo & 0x0F) 9 = sono leve, 11 = sono profundo, 3/6 = fora do pulso/carregando, 0 = sem mudança
 function classify(act) {
   const n = act.u.length / 4, out = new Uint8Array(n); // 0 desconhecido, 1 acordado, 2 leve, 3 profundo
-  let prev = 1;
+  let prev = 1, slept = 0;
   for (let i = 0; i < n; i++) {
     const raw = act.u[i * 4];
     if (raw === 255) { out[i] = 0; prev = 1; continue; }
     const k = raw & 0x0f;
     let c = k === 9 ? 2 : k === 11 ? 3 : k === 0 ? prev : (k === 3 || k === 6) ? 0 : 1;
-    if (c === 2 || c === 3) { if (act.u[i * 4 + 2] > 0) c = 1; }   // passos = acordado
-    out[i] = c; if (c) prev = c;
+    if ((c === 2 || c === 3) && act.u[i * 4 + 2] > 0) c = 1;   // passos = acordado
+    out[i] = c; if (c) prev = c; if (c >= 2) slept++;
+  }
+  if (slept > 60) return out;
+  // plano B: o relogio nao marcou sono -> estima pelo movimento (media de 15 min, sem passos)
+  const W = 7;
+  for (let i = 0; i < n; i++) {
+    if (act.u[i * 4] === 255) { out[i] = 0; continue; }
+    let sum = 0, cnt = 0, steps = 0;
+    for (let j = Math.max(0, i - W); j <= Math.min(n - 1, i + W); j++) {
+      if (act.u[j * 4] === 255) continue;
+      sum += act.u[j * 4 + 1]; steps += act.u[j * 4 + 2]; cnt++;
+    }
+    const avg = cnt ? sum / cnt : 255;
+    const h = new Date((act.t0 + i) * 60000).getHours();
+    const night = h >= 20 || h < 12;
+    out[i] = (!night || steps > 0 || avg > SLEEP_LIGHT) ? 1 : (avg <= SLEEP_DEEP ? 3 : 2);
   }
   return out;
+}
+let SLEEP_LIGHT = 12, SLEEP_DEEP = 2;
+
+function actStats(act) {   // diagnostico: tipos brutos e intensidade
+  const n = act.u.length / 4, kinds = {}; let imax = 0, isum = 0, cnt = 0;
+  for (let i = 0; i < n; i++) {
+    const k = act.u[i * 4]; if (k === 255) continue;
+    kinds[k.toString(16)] = (kinds[k.toString(16)] || 0) + 1;
+    imax = Math.max(imax, act.u[i * 4 + 1]); isum += act.u[i * 4 + 1]; cnt++;
+  }
+  log('atividade: tipos', JSON.stringify(kinds), '| intensidade média', cnt ? (isum / cnt).toFixed(1) : '-', 'máx', imax);
 }
 
 function nights(act) {
@@ -986,13 +1119,19 @@ $('#btnSleep').onclick = async () => {
   try {
     if (!ble.srv || !ble.dev.gatt.connected) throw new Error('conecte o relógio primeiro');
     if (!ble.authOk) throw new Error('o relógio não autenticou — reconecte');
-    let act = loadAct();
-    const since = act ? new Date((act.t0 + act.u.length / 4) * 60000) : new Date(Date.now() - 3 * 86400000);
-    $('#sleepMsg').textContent = 'Baixando desde ' + since.toLocaleString('pt-BR') + '…';
-    const r = await fetchActivity(since, (got, exp) => { progress('#sleepBar', exp ? Math.min(1, got / exp) : null); $('#sleepMsg').textContent = `Recebendo ${got} minutos…`; });
+    let act = loadAct(), total = 0;
+    for (let round = 0; round < 30; round++) {
+      const since = act ? new Date((act.t0 + act.u.length / 4) * 60000) : new Date(Date.now() - 3 * 86400000);
+      if (Date.now() - since.getTime() < 5 * 60000) break;
+      $('#sleepMsg').textContent = 'Baixando desde ' + since.toLocaleString('pt-BR') + '…';
+      const r = await fetchActivity(since, (got, exp) => { progress('#sleepBar', exp ? Math.min(1, got / exp) : null); $('#sleepMsg').textContent = `Recebendo… ${total + got} minutos`; });
+      if (!r.samples.length) break;
+      act = mergeAct(act, r.start, r.samples); saveAct(act); total += r.samples.length;
+      if (r.start.getTime() + r.samples.length * 60000 <= since.getTime()) break;   // nao avancou
+    }
     progress('#sleepBar', null);
-    if (!r.samples.length) { $('#sleepMsg').textContent = '✓ Nada novo desde a última vez.'; }
-    else { act = mergeAct(act, r.start, r.samples); saveAct(act); $('#sleepMsg').textContent = `✓ ${r.samples.length} minutos baixados (${(r.samples.length / 60).toFixed(1)} h).`; }
+    $('#sleepMsg').textContent = total ? `✓ ${total} minutos baixados (${(total / 60).toFixed(1)} h).` : '✓ Nada novo desde a última vez.';
+    if (act) actStats(act);
     renderSleep();
   } catch (e) { $('#sleepMsg').textContent = '✗ ' + e.message; log('erro:', e.message); progress('#sleepBar', null); }
   btn.disabled = false;
