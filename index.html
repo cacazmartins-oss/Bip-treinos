@@ -55,7 +55,12 @@
   .ev-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
   nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: #12151b; border-top: 1px solid var(--line);
         padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
-  nav button { flex: 1; background: none; border-radius: 0; padding: 12px 4px 10px; color: var(--mut); font-size: 12px; }
+  nav button { flex: 1; background: none; border-radius: 0; padding: 12px 2px 10px; color: var(--mut); font-size: 11px; }
+  .hyp { width: 100%; height: 70px; display: block; margin-top: 8px; }
+  .legend { display: flex; gap: 12px; font-size: 12px; color: var(--mut); margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .wk { display: grid; grid-template-columns: 62px 1fr 52px; gap: 8px; align-items: center; font-size: 13px; margin: 5px 0; font-variant-numeric: tabular-nums; }
+  .wk .b { height: 12px; border-radius: 3px; background: #0b0d11; display: flex; overflow: hidden; }
   nav button.on { color: var(--acc); }
   nav svg { display: block; margin: 0 auto 3px; width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; }
   .hint { background: #13202a; border: 1px solid #1f3646; color: #bfe3ff; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin: 10px 0; }
@@ -95,7 +100,7 @@
       <button id="btnCsv" class="grow" disabled>Exportar CSV</button>
     </div>
     <div class="bar" id="readBar" hidden><i></i></div>
-    <p class="muted" id="readMsg">No relógio: abra Treinos e toque em Sincronizar.</p>
+    <p class="muted" id="readMsg">No relógio: abra o app Sincronizar.</p>
     <div id="results"></div>
     <button id="btnClear" class="ghost" hidden>Apagar histórico do relógio…</button>
   </section>
@@ -125,17 +130,30 @@
       <button id="btnSendCal" class="pri" style="margin-top:8px">Enviar ao relógio</button>
     </div>
     <div class="bar" id="calBar" hidden><i></i></div>
-    <p class="muted" id="calMsg">No relógio: abra Calendário e deslize para a esquerda.</p>
+    <p class="muted" id="calMsg">No relógio: abra o app Sincronizar.</p>
     <div id="events"></div>
   </section>
 
   <!-- ======================= AJUDA ======================= -->
+  <section id="tab-sono">
+    <div class="row" style="margin-top:4px">
+      <button id="btnSleep" class="pri grow">Baixar do relógio</button>
+    </div>
+    <div class="bar" id="sleepBar" hidden><i></i></div>
+    <p class="muted" id="sleepMsg">Não precisa abrir nenhum app no relógio — só conectar.</p>
+    <div id="sleepNight"></div>
+    <h2>Últimas noites</h2>
+    <div class="card" id="sleepWeek"><p class="muted">Sem dados ainda.</p></div>
+    <h2>Passos por dia</h2>
+    <div class="card" id="stepsWeek"><p class="muted">Sem dados ainda.</p></div>
+  </section>
+
   <section id="tab-help">
     <h2>Como conectar</h2>
     <ol class="how">
-      <li>⌚ No relógio, abra o app <b>Treinos</b> e toque em <b>Sincronizar</b> — ou abra o <b>Calendário</b> e deslize para a esquerda.</li>
+      <li>⌚ No relógio, abra o app <b>Sincronizar</b>.</li>
       <li>📱 Neste app, toque em <b>Conectar</b> e escolha o <b>Amazfit Bip</b> na lista.</li>
-      <li>📱 Use Enviar / Baixar. Ao terminar, aperte o botão do relógio para sair da sincronização.</li>
+      <li>📱 Use Enviar / Baixar. Ao terminar, aperte o botão do relógio para sair.</li>
     </ol>
     <div class="hint">No iPhone, use o navegador <b>Bluefy</b> (o Safari não tem Bluetooth para sites). No computador, use o <b>Chrome</b> ou o <b>Edge</b>.</div>
     <h2>O relógio não aparece na lista?</h2>
@@ -162,6 +180,7 @@
   <button data-tab="treinos" class="on"><svg viewBox="0 0 24 24"><path d="M13 4a2 2 0 1 0 0 .1M7 21l3-6 3 2v5M10 15l1-5 4 3 3-1M8 10l3-2"/></svg>Treinos</button>
   <button data-tab="res"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resultados</button>
   <button data-tab="cal"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendário</button>
+  <button data-tab="sono"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Sono</button>
   <button data-tab="help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5v.1"/></svg>Ajuda</button>
 </nav>
 
@@ -476,6 +495,73 @@ async function huamiAuth(srv, pair = false) {
   return false;
 }
 
+
+/* ---------------------------------------------------------------- servico Mi Band (hora e atividade) */
+const MI_SVC = '0000fee0-0000-1000-8000-00805f9b34fb';
+const CHR_TIME = '00002a2b-0000-1000-8000-00805f9b34fb';
+const CHR_FETCH = '00000004-0000-3512-2118-0009af100700';
+const CHR_ACT = '00000005-0000-3512-2118-0009af100700';
+const tzQuarters = d => (-d.getTimezoneOffset() / 15) & 255;
+function dateBytes(d, seconds) {
+  const b = [d.getFullYear() & 255, d.getFullYear() >> 8, d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()];
+  if (seconds) b.push(d.getSeconds(), d.getDay() === 0 ? 7 : d.getDay(), 0);
+  return b.concat([0, tzQuarters(d)]);
+}
+function bytesDate(v, o) {            // ano(2) mes dia hora min seg -> Date (hora local do relogio)
+  return new Date(v[o] | v[o + 1] << 8, v[o + 2] - 1, v[o + 3], v[o + 4], v[o + 5], v[o + 6] || 0);
+}
+
+async function setWatchTime() {
+  const svc = await ble.srv.getPrimaryService(MI_SVC);
+  const c = await svc.getCharacteristic(CHR_TIME);
+  const now = new Date();
+  await c.writeValue(Uint8Array.from(dateBytes(now, true)));
+  log('hora acertada:', now.toLocaleString('pt-BR'));
+}
+
+/* baixa as amostras por minuto desde `since`. Cada amostra: [tipo, intensidade, passos, FC] */
+async function fetchActivity(since, onProgress) {
+  const svc = await ble.srv.getPrimaryService(MI_SVC);
+  const cf = await svc.getCharacteristic(CHR_FETCH), ca = await svc.getCharacteristic(CHR_ACT);
+  let ctlWait = null, start = null, expected = 0;
+  const samples = [];
+  const onCtl = e => { const v = new Uint8Array(e.target.value.buffer.slice(0)); log('atividade ctl:', hex(v)); if (ctlWait) { const w = ctlWait; ctlWait = null; w(v); } };
+  const onData = e => {
+    const v = new Uint8Array(e.target.value.buffer.slice(0));
+    for (let i = 1; i + 3 < v.length; i += 4) samples.push([v[i], v[i + 1], v[i + 2], v[i + 3]]);
+    if (onProgress) onProgress(samples.length, expected);
+  };
+  const waitCtl = ms => new Promise(res => { const t = setTimeout(() => { ctlWait = null; res(null); }, ms); ctlWait = v => { clearTimeout(t); res(v); }; });
+  cf.addEventListener('characteristicvaluechanged', onCtl);
+  ca.addEventListener('characteristicvaluechanged', onData);
+  try {
+    await cf.startNotifications(); await ca.startNotifications();
+    let p = waitCtl(5000);
+    await cf.writeValue(Uint8Array.from([0x01, 0x01, ...dateBytes(since, false)]));
+    const r = await p;
+    if (!r || r[0] !== 0x10 || r[1] !== 0x01 || r[2] !== 0x01) throw new Error('o relógio recusou o pedido de atividade (' + (r ? hex(r) : 'sem resposta') + ')');
+    expected = r[3] | r[4] << 8 | r[5] << 16 | r[6] << 24;
+    start = bytesDate(r, 7);
+    log('atividade: início', start.toLocaleString('pt-BR'), '| esperado', expected);
+    if (!expected) return { start, samples };
+    // aguarda o fim (0x10 0x02 0x01); se o relogio parar de mandar, encerra por inatividade
+    p = waitCtl(1e9);
+    await cf.writeValue(Uint8Array.from([0x02]));
+    let last = -1;
+    while (true) {
+      const done = await Promise.race([p.then(() => true), sleep(4000).then(() => false)]);
+      if (done) break;
+      if (samples.length === last) { log('atividade: parou de receber'); break; }
+      last = samples.length;
+    }
+    return { start, samples };
+  } finally {
+    try { await ca.stopNotifications(); await cf.stopNotifications(); } catch (e) {}
+    cf.removeEventListener('characteristicvaluechanged', onCtl);
+    ca.removeEventListener('characteristicvaluechanged', onData);
+  }
+}
+
 let wantConnected = false;
 async function openLink(pair = false) {
   setConn(false, 'conectando…');
@@ -495,8 +581,10 @@ async function openLink(pair = false) {
   });
   await chr.startNotifications();
   ble.ch = chr;
+  ble.srv = srv; ble.authOk = ok;
   setConn(true, ok ? 'conectado' : 'conectado (sem autenticar)');
   log('conectado a', ble.dev.name);
+  if (ok) await setWatchTime().catch(e => log('hora: falhou —', e.message));
   detectApp();
 }
 
@@ -506,9 +594,9 @@ async function connect(all, pair = false) {
   try {
     setConn(false, 'procurando…');
     const dev = await navigator.bluetooth.requestDevice(all
-      ? { acceptAllDevices: true, optionalServices: [SVC, AUTH_SVC] }
+      ? { acceptAllDevices: true, optionalServices: [SVC, AUTH_SVC, MI_SVC] }
       : { filters: [{ namePrefix: 'Amazfit' }, { namePrefix: 'Bip' }, { namePrefix: 'Mili' }, { services: [SVC] }],
-          optionalServices: [SVC, AUTH_SVC] });
+          optionalServices: [SVC, AUTH_SVC, MI_SVC] });
     if (dev !== ble.dev) {
       dev.addEventListener('gattserverdisconnected', async () => {
         ble.ch = null; setConn(false); log('desconectado');
@@ -549,16 +637,16 @@ async function req(bytes, expect, timeout = 1500, tries = 3) {
     if (v) return v;
     log('sem resposta para', String.fromCharCode(bytes[0]), '— tentando de novo');
   }
-  throw new Error('o relógio não respondeu. Ele está na tela de sincronização?');
+  throw new Error('o relógio não respondeu. O app Sincronizar está aberto no relógio?');
 }
 const ch = c => c.charCodeAt(0);
 
 async function detectApp() {
-  try { const v = await req([ch('H')], ch('h'), 700, 1); const h = Treinos.readHeader(v.subarray(1));
-        setConn(true, 'Treinos ✓'); log('app Treinos:', JSON.stringify(h)); return 'treinos'; } catch (e) {}
-  try { const v = await req([ch('G')], ch('g'), 700, 1); setConn(true, 'Calendário ✓'); log('app Calendário, eventos:', v[5]); return 'cal'; } catch (e) {}
-  setConn(true, 'abra a sincronização no relógio');
-  return null;
+  let tr = false, cal = false;
+  try { const v = await req([ch('H')], ch('h'), 900, 2); tr = true; log('Treinos:', JSON.stringify(Treinos.readHeader(v.subarray(1)))); } catch (e) {}
+  try { const v = await req([ch('G')], ch('g'), 900, 2); cal = true; log('Calendário, eventos:', v[5]); } catch (e) {}
+  setConn(true, tr || cal ? 'relógio pronto ✓' : 'abra o app Sincronizar no relógio');
+  return tr || cal;
 }
 
 function progress(sel, frac) { const b = $(sel); b.hidden = frac == null; if (frac != null) b.firstElementChild.style.width = (frac * 100).toFixed(1) + '%'; }
@@ -776,14 +864,143 @@ $('#btnSendCal').onclick = async () => {
     const s = await req([ch('S')], ch('s'));
     if (!s[1]) throw new Error('o relógio recusou os dados');
     progress('#calBar', 1);
-    $('#calMsg').textContent = `✓ ${img[5]} compromisso(s) no relógio. Aperte o botão para voltar à semana.`;
+    $('#calMsg').textContent = `✓ ${img[5]} compromisso(s) no relógio. Aperte o botão do relógio para sair.`;
   } catch (e) { $('#calMsg').textContent = '✗ ' + e.message; log('erro:', e.message); }
+  btn.disabled = false;
+};
+
+
+/* ---------------------------------------------------------------- sono */
+const DEEP = '#5b6cff', LIGHT = '#9fb0ff', AWAKE = '#f5c542';
+// guarda as amostras por minuto: { t0: minuto (ms/60000) da 1a amostra, d: base64 de 4 bytes/minuto }
+function loadAct() {
+  const a = store.get('act', null); if (!a) return null;
+  try { const bin = atob(a.d); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return { t0: a.t0, u }; } catch (e) { return null; }
+}
+function saveAct(act) {
+  let s = ''; for (let i = 0; i < act.u.length; i += 8192) s += String.fromCharCode.apply(null, act.u.subarray(i, i + 8192));
+  store.set('act', { t0: act.t0, d: btoa(s) });
+}
+function mergeAct(act, start, samples) {
+  const m0 = Math.floor(start.getTime() / 60000);
+  const KEEP = 21 * 1440;
+  let t0 = act ? Math.min(act.t0, m0) : m0;
+  let t1 = Math.max(act ? act.t0 + act.u.length / 4 : 0, m0 + samples.length);
+  t0 = Math.max(t0, t1 - KEEP);
+  const u = new Uint8Array((t1 - t0) * 4).fill(255);
+  if (act) for (let m = Math.max(act.t0, t0); m < act.t0 + act.u.length / 4; m++) u.set(act.u.subarray((m - act.t0) * 4, (m - act.t0) * 4 + 4), (m - t0) * 4);
+  samples.forEach((x, i) => { const m = m0 + i; if (m >= t0) u.set(x, (m - t0) * 4); });
+  return { t0, u };
+}
+
+// tipo bruto do Bip: (tipo & 0x0F) 9 = sono leve, 11 = sono profundo, 3/6 = fora do pulso/carregando, 0 = sem mudança
+function classify(act) {
+  const n = act.u.length / 4, out = new Uint8Array(n); // 0 desconhecido, 1 acordado, 2 leve, 3 profundo
+  let prev = 1;
+  for (let i = 0; i < n; i++) {
+    const raw = act.u[i * 4];
+    if (raw === 255) { out[i] = 0; prev = 1; continue; }
+    const k = raw & 0x0f;
+    let c = k === 9 ? 2 : k === 11 ? 3 : k === 0 ? prev : (k === 3 || k === 6) ? 0 : 1;
+    if (c === 2 || c === 3) { if (act.u[i * 4 + 2] > 0) c = 1; }   // passos = acordado
+    out[i] = c; if (c) prev = c;
+  }
+  return out;
+}
+
+function nights(act) {
+  const cls = classify(act), res = [];
+  let i = 0; const n = cls.length;
+  while (i < n) {
+    if (cls[i] < 2) { i++; continue; }
+    let j = i, lastSleep = i;
+    while (j < n && (cls[j] >= 2 || j - lastSleep <= 30)) { if (cls[j] >= 2) lastSleep = j; j++; }
+    const s = i, e = lastSleep + 1;
+    if (e - s >= 90) {
+      let deep = 0, light = 0, awake = 0;
+      for (let k = s; k < e; k++) cls[k] === 3 ? deep++ : cls[k] === 2 ? light++ : awake++;
+      res.push({ s: new Date((act.t0 + s) * 60000), e: new Date((act.t0 + e) * 60000), deep, light, awake, cls: cls.slice(s, e) });
+    }
+    i = lastSleep + 1;
+  }
+  return res;
+}
+
+const hm = m => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
+const clock = d => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const dlabel = d => d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' });
+
+function hypnogram(n) {
+  const W = 600, H = 70, len = n.cls.length, y = { 1: 4, 2: 26, 3: 48 }, col = { 1: AWAKE, 2: LIGHT, 3: DEEP };
+  let rects = '', k = 0;
+  while (k < len) {
+    let j = k; while (j < len && n.cls[j] === n.cls[k]) j++;
+    const c = n.cls[k] || 1;
+    rects += `<rect x="${(k / len * W).toFixed(1)}" y="${y[c]}" width="${Math.max(1, (j - k) / len * W).toFixed(1)}" height="18" rx="2" fill="${col[c]}"/>`;
+    k = j;
+  }
+  return `<svg class="hyp" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${rects}</svg>`;
+}
+
+function renderSleep() {
+  const act = loadAct();
+  if (!act) return;
+  const ns = nights(act);
+  const last = ns[ns.length - 1];
+  if (last) {
+    const tot = last.deep + last.light;
+    $('#sleepNight').innerHTML = `<div class="card">
+      <div class="row"><b class="grow">Última noite · ${dlabel(last.e)}</b><span class="muted">${clock(last.s)} → ${clock(last.e)}</span></div>
+      <div class="kpis">
+        <div><b>${hm(tot)}</b><span>dormindo</span></div>
+        <div><b>${hm(last.deep)}</b><span>profundo</span></div>
+        <div><b>${hm(last.light)}</b><span>leve</span></div>
+        <div><b>${last.awake}m</b><span>acordado</span></div>
+      </div>
+      ${hypnogram(last)}
+      <div class="legend"><span><i style="background:${AWAKE}"></i>acordado</span><span><i style="background:${LIGHT}"></i>leve</span><span><i style="background:${DEEP}"></i>profundo</span></div>
+    </div>`;
+  } else $('#sleepNight').innerHTML = '<p class="muted">Nenhuma noite de sono encontrada nos dados baixados.</p>';
+
+  const wk = ns.slice(-7);
+  const max = Math.max(480, ...wk.map(n => n.deep + n.light));
+  const avg = wk.length ? Math.round(wk.reduce((a, n) => a + n.deep + n.light, 0) / wk.length) : 0;
+  $('#sleepWeek').innerHTML = wk.length ? wk.map(n => `<div class="wk"><span>${dlabel(n.e)}</span>
+      <div class="b"><i style="width:${n.deep / max * 100}%;background:${DEEP}"></i><i style="width:${n.light / max * 100}%;background:${LIGHT}"></i></div>
+      <span style="text-align:right">${hm(n.deep + n.light)}</span></div>`).join('') + `<p class="muted" style="margin:8px 0 0">Média: ${hm(avg)} por noite</p>` : '<p class="muted">Sem noites ainda.</p>';
+
+  // passos por dia (ultimos 7 dias)
+  const days = new Map(), n = act.u.length / 4;
+  for (let i = 0; i < n; i++) {
+    const st = act.u[i * 4 + 2]; if (act.u[i * 4] === 255) continue;
+    const d = new Date((act.t0 + i) * 60000); const key = d.toDateString();
+    days.set(key, (days.get(key) || 0) + st);
+  }
+  const ds = [...days.entries()].slice(-7), mx = Math.max(10000, ...ds.map(x => x[1]));
+  $('#stepsWeek').innerHTML = ds.map(([k, v]) => `<div class="wk"><span>${dlabel(new Date(k))}</span>
+      <div class="b"><i style="width:${v / mx * 100}%;background:var(--acc)"></i></div><span style="text-align:right">${v.toLocaleString('pt-BR')}</span></div>`).join('');
+}
+
+$('#btnSleep').onclick = async () => {
+  const btn = $('#btnSleep'); btn.disabled = true;
+  try {
+    if (!ble.srv || !ble.dev.gatt.connected) throw new Error('conecte o relógio primeiro');
+    if (!ble.authOk) throw new Error('o relógio não autenticou — reconecte');
+    let act = loadAct();
+    const since = act ? new Date((act.t0 + act.u.length / 4) * 60000) : new Date(Date.now() - 3 * 86400000);
+    $('#sleepMsg').textContent = 'Baixando desde ' + since.toLocaleString('pt-BR') + '…';
+    const r = await fetchActivity(since, (got, exp) => { progress('#sleepBar', exp ? Math.min(1, got / exp) : null); $('#sleepMsg').textContent = `Recebendo ${got} minutos…`; });
+    progress('#sleepBar', null);
+    if (!r.samples.length) { $('#sleepMsg').textContent = '✓ Nada novo desde a última vez.'; }
+    else { act = mergeAct(act, r.start, r.samples); saveAct(act); $('#sleepMsg').textContent = `✓ ${r.samples.length} minutos baixados (${(r.samples.length / 60).toFixed(1)} h).`; }
+    renderSleep();
+  } catch (e) { $('#sleepMsg').textContent = '✗ ' + e.message; log('erro:', e.message); progress('#sleepBar', null); }
   btn.disabled = false;
 };
 
 $('#authKey').value = store.get('authkey', '');
 $('#authKey').onchange = () => store.set('authkey', $('#authKey').value.trim());
-renderPlan(); renderResults(); renderEvents();
+renderPlan(); renderResults(); renderEvents(); renderSleep();
 </script>
 </body>
 </html>
