@@ -624,12 +624,20 @@ $('#btnInst').onclick = async () => {
     const svc = await ble.srv.getPrimaryService(FW_SVC);
     const ctl = await svc.getCharacteristic(FW_CTL), data = await svc.getCharacteristic(FW_DATA);
     const waiters = [];
-    const onCtl = e => { const v = new Uint8Array(e.target.value.buffer.slice(0)); log('instalar ctl:', hex(v)); const w = waiters.shift(); if (w) w(v); };
+    const onCtl = e => {
+      const v = new Uint8Array(e.target.value.buffer.slice(0)); log('instalar ctl:', hex(v));
+      const w = waiters[0]; if (w && w(v)) waiters.shift();          // w devolve true se a resposta era a esperada
+    };
     ctl.addEventListener('characteristicvaluechanged', onCtl);
     await ctl.startNotifications();
     const expect = (cmd, ms) => new Promise((res, rej) => {
       const t = setTimeout(() => rej(new Error('o relógio não respondeu (etapa ' + cmd + ')')), ms);
-      waiters.push(v => { clearTimeout(t); if (v[0] === 0x10 && v[1] === cmd && v[2] === 0x01) res(v); else rej(new Error('o relógio recusou (etapa ' + cmd + ': ' + hex(v) + ')')); });
+      waiters.push(v => {
+        if (v[0] === 0x10 && v[1] !== cmd && v[2] === 0x01) return false;   // confirmacao de outra etapa (ex.: 10 03 01): ignora
+        clearTimeout(t);
+        if (v[0] === 0x10 && v[1] === cmd && v[2] === 0x01) res(v); else rej(new Error('o relógio recusou (etapa ' + cmd + ': ' + hex(v) + ')'));
+        return true;
+      });
     });
     const b = instBlob, n = b.length, type = FW_TYPES[instKind].code;
     try {
