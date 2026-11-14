@@ -53,6 +53,11 @@
   .bar { height: 6px; border-radius: 3px; background: #0b0d11; overflow: hidden; margin-top: 8px; }
   .bar i { display: block; height: 100%; width: 0; background: var(--acc); }
   .ev-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .seg { display: flex; gap: 3px; background: #0b0d11; border: 1px solid var(--line); border-radius: 11px; padding: 3px; margin: 2px 0 14px; position: sticky; top: 58px; z-index: 4; }
+  .seg button { flex: 1; background: none; color: var(--mut); padding: 8px 6px; font-size: 14px; border-radius: 8px; }
+  .seg button.on { background: #2a303c; color: var(--ink); font-weight: 600; }
+  .sub { display: none; } .sub.on { display: block; }
+  details.adv { margin-top: 14px; } details.adv > summary { cursor: pointer; color: var(--mut); padding: 8px 0; font-size: 14px; }
   nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: #12151b; border-top: 1px solid var(--line);
         padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
   nav button { flex: 1; background: none; border-radius: 0; padding: 12px 2px 10px; color: var(--mut); font-size: 11px; }
@@ -78,9 +83,12 @@
 </header>
 
 <main>
-  <!-- ======================= TREINOS ======================= -->
-  <section id="tab-treinos" class="on">
-    <div class="hint" id="btHint" hidden></div>
+  <div class="hint" id="btHint" hidden></div>
+
+  <!-- ======================= CORRIDA ======================= -->
+  <section id="tab-corrida" class="on">
+    <div class="seg"><button data-sub="sub-plan" class="on">Planejar</button><button data-sub="sub-res">Resultados</button></div>
+    <div class="sub on" id="sub-plan">
     <h2>Texto do treinador</h2>
     <textarea id="coach" placeholder="Cole aqui a planilha da semana, ex.:&#10;1º treino: Rodagem 10 km Leve (5:15 a 5:25)&#10;2º treino: Intervalado&#10;Aquecer: 10' regenerativo (6:15 a 6:30)&#10;Repetir 8 x: Correr 800 metros (4:30 a 4:40) descansar 200 metros (6:15 a 6:25)&#10;Desaquecer: 5' (6:15 a 6:25)"></textarea>
     <div class="row" style="margin-top:8px">
@@ -91,15 +99,16 @@
     <p class="muted" id="sendMsg"></p>
     <h2 id="planTitle">Treinos</h2>
     <div id="plan"><p class="muted">Nenhum treino ainda. Cole o texto e toque em Interpretar.</p></div>
-  </section>
-
-  <!-- ======================= RESULTADOS ======================= -->
-  <section id="tab-res">
+    </div>
+    <div class="sub" id="sub-res">
     <div class="row" style="margin-top:4px">
       <button id="btnRead" class="pri grow">Baixar do relógio</button>
       <button id="btnCsv" class="grow" disabled>Exportar CSV</button>
     </div>
     <div class="bar" id="readBar" hidden><i></i></div>
+    <p class="muted" id="readMsg">No relógio: abra o app Sincronizar.</p>
+    <div id="results"></div>
+    <button id="btnClear" class="ghost" hidden>Apagar histórico do relógio…</button>
     <div class="card">
       <b>Percurso completo do último treino</b>
       <p class="muted" style="margin:4px 0 8px">GPS, FC e elevação a cada 5 s. Gera um arquivo GPX para importar no Strava (strava.com → Enviar atividade → Arquivo).</p>
@@ -108,20 +117,14 @@
       <p class="muted" id="trackMsg" style="margin:6px 0 0"></p>
       <div id="trackSplits"></div>
     </div>
-    <p class="muted" id="readMsg">No relógio: abra o app Sincronizar.</p>
-    <div id="results"></div>
-    <button id="btnClear" class="ghost" hidden>Apagar histórico do relógio…</button>
+    </div>
   </section>
 
-  <!-- ======================= CALENDARIO ======================= -->
-  <section id="tab-gym">
-    <h2>Seu perfil (para as calorias)</h2>
-    <div class="card row">
-      <div class="grow"><label for="gSex">Sexo</label><select id="gSex"><option value="0">Masculino</option><option value="1">Feminino</option></select></div>
-      <div class="grow"><label for="gAge">Idade</label><input id="gAge" type="number" min="10" max="99" value="30"></div>
-      <div class="grow"><label for="gWeight">Peso (kg)</label><input id="gWeight" type="number" step="0.1" min="30" max="250" value="75"></div>
-    </div>
-    <h2>Treino de academia</h2>
+  <!-- ======================= ACADEMIA ======================= -->
+  <section id="tab-academia">
+    <div class="seg"><button data-sub="sub-gplan" class="on">Treinos</button><button data-sub="sub-ghist">Histórico</button></div>
+    <div class="sub on" id="sub-gplan">
+    <h2>Treinos de academia</h2>
     <textarea id="gymText" placeholder="Até 6 treinos. Uma linha com o nome do treino e, embaixo, um exercício por linha (séries x repetições, carga, descanso). Ex.:&#10;Treino A - Peito&#10;Supino reto 4x10 60kg 90s&#10;Crucifixo 3x12 1min&#10;Treino B - Perna&#10;Agachamento 4x8 80kg 2'&#10;Prancha 3x 45s"></textarea>
     <div class="row" style="margin-top:8px">
       <button id="btnGymParse" class="grow">Interpretar</button>
@@ -130,7 +133,15 @@
     <div class="bar" id="gymBar" hidden><i></i></div>
     <p class="muted" id="gymMsg">No relógio: abra o app Sincronizar.</p>
     <div id="gymPlan"></div>
-    <h2>Treinos feitos</h2>
+    <details class="adv"><summary>Seu perfil (para as calorias)</summary>
+    <div class="card row">
+      <div class="grow"><label for="gSex">Sexo</label><select id="gSex"><option value="0">Masculino</option><option value="1">Feminino</option></select></div>
+      <div class="grow"><label for="gAge">Idade</label><input id="gAge" type="number" min="10" max="99" value="30"></div>
+      <div class="grow"><label for="gWeight">Peso (kg)</label><input id="gWeight" type="number" step="0.1" min="30" max="250" value="75"></div>
+    </div>
+    </details>
+    </div>
+    <div class="sub" id="sub-ghist">
     <div class="row">
       <button id="btnGymRead" class="grow">Baixar do relógio</button>
       <button id="btnGymCsv" class="grow" disabled>Exportar CSV</button>
@@ -139,9 +150,10 @@
     <button id="btnGymTcx" style="width:100%;margin-top:6px">Exportar o último treino (TCX, para o Strava)</button>
     <p class="muted" id="gymTcxMsg"></p>
     <div id="gymResults"></div>
+    </div>
   </section>
 
-  <!-- ======================= AJUDA ======================= -->
+  <!-- ======================= SONO ======================= -->
   <section id="tab-sono">
     <div class="row" style="margin-top:4px">
       <button id="btnSleep" class="pri grow">Baixar do relógio</button>
@@ -156,7 +168,27 @@
     <div class="card" id="stepsWeek"><p class="muted">Sem dados ainda.</p></div>
   </section>
 
-  <section id="tab-inst">
+  <!-- ======================= RELOGIO ======================= -->
+  <section id="tab-relogio">
+    <div class="seg"><button data-sub="sub-ajustes" class="on">Ajustes</button><button data-sub="sub-inst">Instalar</button><button data-sub="sub-ajuda">Ajuda</button></div>
+    <div class="sub on" id="sub-ajustes">
+    <div class="card">
+      <b>Acender a tela ao girar o pulso</b>
+      <p class="muted" style="margin:4px 0 8px">O mesmo ajuste do Zepp. Vale para o relógio todo, inclusive durante os treinos.</p>
+      <div class="row"><button id="btnLiftOn" class="grow">Ligar</button><button id="btnLiftOff" class="grow">Desligar</button></div>
+      <p class="muted" id="liftMsg" style="margin:6px 0 0"></p>
+    </div>
+    <div class="card">
+      <b>Frequência cardíaca automática</b>
+      <p class="muted" style="margin:4px 0 8px">Faz o relógio medir a FC sozinho ao longo do dia e durante o sono (o mesmo ajuste do Zepp). Melhora a detecção do sono; gasta um pouco mais de bateria.</p>
+      <label for="hrEvery">Medir a cada</label>
+      <select id="hrEvery"><option value="0">Desligado</option><option value="1">1 minuto</option><option value="5">5 minutos</option><option value="10" selected>10 minutos</option><option value="30">30 minutos</option></select>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input id="hrSleep" type="checkbox" checked style="width:auto"> Monitorar o sono com FC (assistente de sono)</label>
+      <button id="btnHrSet" style="width:100%;margin-top:8px">Aplicar no relógio</button>
+      <p class="muted" id="hrMsg" style="margin:6px 0 0"></p>
+    </div>
+    </div>
+    <div class="sub" id="sub-inst">
     <div class="hint">Mesma instalação do Gadgetbridge. Ordem quando houver mais de um: <b>firmware → recursos → fonte</b>. Deixe o relógio perto e a tela do computador/celular ligada até terminar.</div>
     <label for="instFile">Arquivo (.fw, .res ou .ft)</label>
     <input id="instFile" type="file" accept=".fw,.res,.ft,.bin">
@@ -164,9 +196,8 @@
     <button id="btnInst" class="pri" style="width:100%;margin-top:8px" disabled>Instalar no relógio</button>
     <div class="bar" id="instBar" hidden><i></i></div>
     <p class="muted" id="instMsg"></p>
-  </section>
-
-  <section id="tab-help">
+  </div>
+    <div class="sub" id="sub-ajuda">
     <h2>Como conectar</h2>
     <ol class="how">
       <li>⌚ No relógio, abra o app <b>Sincronizar</b>.</li>
@@ -181,40 +212,34 @@
       <li>💻 Se ainda não aparecer, procure sem filtro e veja se surge algum "Amazfit" ou "Bip":</li>
     </ol>
     <button id="btnConnAll">Procurar todos os dispositivos</button>
-    <h2>Ajustes do relógio</h2>
-    <div class="card">
-      <b>Acender a tela ao girar o pulso</b>
-      <p class="muted" style="margin:4px 0 8px">O mesmo ajuste do Zepp. Vale para o relógio todo, inclusive durante os treinos.</p>
-      <div class="row"><button id="btnLiftOn" class="grow">Ligar</button><button id="btnLiftOff" class="grow">Desligar</button></div>
-      <p class="muted" id="liftMsg" style="margin:6px 0 0"></p>
-    </div>
-    <h2>Diagnóstico da Música</h2>
+      <h2>Limites</h2>
+      <p class="muted">Corrida: até 8 treinos com 40 etapas cada (as repetições contam: 8×(800+200) = 16 etapas). Academia: até 6 treinos com 12 exercícios. O relógio guarda os últimos 10 resultados de cada.</p>
+      <details class="adv"><summary>Avançado</summary>
+        <h2>Parear</h2>
+    <p class="muted">Se o Registro disser "autenticação falhou", o relógio está com a chave de outro app (o Zepp). Toque abaixo, escolha o relógio e <b>confirme no relógio</b> quando ele pedir. A chave passa a ser a padrão do Gadgetbridge, então ele continua funcionando; o Zepp deixa de conectar.</p>
+    <button id="btnPair" class="pri">Parear este app com o relógio</button>
+        <h2>Chave de autenticação</h2>
+    <p class="muted">Deixe vazio para usar a chave padrão do Gadgetbridge. Se o relógio foi pareado com outra chave, cole aqui os 32 caracteres (0x…).</p>
+    <input id="authKey" placeholder="padrão do Gadgetbridge" autocomplete="off">
+        <h2>Registro do app Música (pesquisa)</h2>
     <div class="card">
       <p class="muted" style="margin:0 0 8px">Depois de abrir o app Música no relógio (por ~1 minuto), abra o Sincronizar e baixe o registro. Mande o arquivo .txt para análise.</p>
       <button id="btnMusLog" style="width:100%">Baixar registro da Música</button>
       <div class="bar" id="musBar" hidden><i></i></div>
       <p class="muted" id="musMsg" style="margin:6px 0 0"></p>
     </div>
-    <h2>Parear</h2>
-    <p class="muted">Se o Registro disser "autenticação falhou", o relógio está com a chave de outro app (o Zepp). Toque abaixo, escolha o relógio e <b>confirme no relógio</b> quando ele pedir. A chave passa a ser a padrão do Gadgetbridge, então ele continua funcionando; o Zepp deixa de conectar.</p>
-    <button id="btnPair" class="pri">Parear este app com o relógio</button>
-    <h2>Chave de autenticação</h2>
-    <p class="muted">Deixe vazio para usar a chave padrão do Gadgetbridge. Se o relógio foi pareado com outra chave, cole aqui os 32 caracteres (0x…).</p>
-    <input id="authKey" placeholder="padrão do Gadgetbridge" autocomplete="off">
-    <h2>Limites</h2>
-    <p class="muted">Até 8 treinos com 40 etapas cada (as repetições contam: 8×(800+200) = 16 etapas). O relógio guarda os últimos 10 resultados de corrida e 10 de academia. Academia: até 16 exercícios.</p>
-    <h2>Registro</h2>
-    <div class="card"><div id="log"></div></div>
+        <h2>Registro de conexão</h2>
+        <div class="card"><div id="log"></div></div>
+      </details>
+    </div>
   </section>
 </main>
 
 <nav>
-  <button data-tab="treinos" class="on"><svg viewBox="0 0 24 24"><path d="M13 4a2 2 0 1 0 0 .1M7 21l3-6 3 2v5M10 15l1-5 4 3 3-1M8 10l3-2"/></svg>Treinos</button>
-  <button data-tab="res"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resultados</button>
-  <button data-tab="gym"><svg viewBox="0 0 24 24"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>Academia</button>
+  <button data-tab="corrida" class="on"><svg viewBox="0 0 24 24"><path d="M13 4a2 2 0 1 0 0 .1M7 21l3-6 3 2v5M10 15l1-5 4 3 3-1M8 10l3-2"/></svg>Corrida</button>
+  <button data-tab="academia"><svg viewBox="0 0 24 24"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>Academia</button>
   <button data-tab="sono"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Sono</button>
-  <button data-tab="inst"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>Instalar</button>
-  <button data-tab="help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5v.1"/></svg>Ajuda</button>
+  <button data-tab="relogio"><svg viewBox="0 0 24 24"><rect x="7" y="6" width="10" height="12" rx="2"/><path d="M9 6l1-3h4l1 3M9 18l1 3h4l1-3M12 10v2l1.5 1"/></svg>Relógio</button>
 </nav>
 
 <script>// Porta em JavaScript de tools/treinos.py (parse + build + leitura de resultados).
@@ -459,6 +484,11 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + b.dataset.tab));
   window.scrollTo(0, 0);
 });
+
+document.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.onclick = () => {
+  seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  seg.closest('section').querySelectorAll('.sub').forEach(d => d.classList.toggle('on', d.id === b.dataset.sub));
+}));
 
 /* ---------------------------------------------------------------- Bluetooth */
 const SVC = '00003802-0000-1000-8000-00805f9b34fb';
@@ -846,6 +876,24 @@ $('#btnMusLog').onclick = async () => {
   btn.disabled = false;
 };
 
+/* ---------------------------------------------------------------- FC automatica (servico Heart Rate 0x180D, ponto de controle 0x2A39) */
+const HR_SVC = '0000180d-0000-1000-8000-00805f9b34fb';
+const HR_CTL = '00002a39-0000-1000-8000-00805f9b34fb';
+$('#btnHrSet').onclick = async () => {
+  const m = t => { $('#hrMsg').textContent = t; };
+  try {
+    if (!ble.srv || !ble.dev.gatt.connected || !ble.authOk) throw new Error('conecte o relógio primeiro');
+    const c = await (await ble.srv.getPrimaryService(HR_SVC)).getCharacteristic(HR_CTL);
+    const every = +$('#hrEvery').value, sleep = $('#hrSleep').checked;
+    await c.writeValue(Uint8Array.from([0x14, every]));                 // intervalo da medicao automatica (min; 0 = desligado)
+    await sleep_(300);
+    await c.writeValue(Uint8Array.from([0x15, 0x00, sleep ? 1 : 0]));   // medir FC durante o sono
+    log('FC automática:', every, 'min; sono:', sleep);
+    m(`✓ Aplicado: ${every ? 'a cada ' + every + ' min' : 'desligado'}${sleep ? ', com monitoramento do sono' : ''}.`);
+  } catch (e) { m('✗ ' + e.message); log('erro FC automática:', e.message); }
+};
+const sleep_ = ms => new Promise(r => setTimeout(r, ms));
+
 let wantConnected = false;
 async function openLink(pair = false) {
   setConn(false, 'conectando…');
@@ -878,9 +926,9 @@ async function connect(all, pair = false) {
   try {
     setConn(false, 'procurando…');
     const dev = await navigator.bluetooth.requestDevice(all
-      ? { acceptAllDevices: true, optionalServices: [SVC, AUTH_SVC, MI_SVC, FW_SVC] }
+      ? { acceptAllDevices: true, optionalServices: [SVC, AUTH_SVC, MI_SVC, FW_SVC, HR_SVC] }
       : { filters: [{ namePrefix: 'Amazfit' }, { namePrefix: 'Bip' }, { namePrefix: 'Mili' }, { services: [SVC] }],
-          optionalServices: [SVC, AUTH_SVC, MI_SVC, FW_SVC] });
+          optionalServices: [SVC, AUTH_SVC, MI_SVC, FW_SVC, HR_SVC] });
     if (dev !== ble.dev) {
       dev.addEventListener('gattserverdisconnected', async () => {
         ble.ch = null; setConn(false); log('desconectado');
@@ -1255,36 +1303,39 @@ function mergeAct(act, start, samples) {
   return { t0, u };
 }
 
-// tipo bruto do Bip: (tipo & 0x0F) 9 = sono leve, 11 = sono profundo, 3/6 = fora do pulso/carregando, 0 = sem mudança
+// Sono estimado pelo movimento (actigrafia), calibrado com dados reais do Bip:
+// o relogio NAO marca sono/estagios nos minutos (isso era feito pelo Zepp); os codigos de tipo
+// (0x50/0x60/0x70...) sao quase sempre "sem mudanca". Regras:
+//  - fora do pulso: tipo 0x73, ou 60+ minutos seguidos com intensidade exatamente 0
+//  - dormindo: entre 20h e 12h, sem passos na janela de 31 min, mediana da intensidade <= 4
+//    e pelo menos 55% dos minutos parados
+//  - profundo: dormindo e no maximo 2 minutos com movimento nos 21 min em volta
 function classify(act) {
-  const n = act.u.length / 4, out = new Uint8Array(n); // 0 desconhecido, 1 acordado, 2 leve, 3 profundo
-  let prev = 1, slept = 0;
-  for (let i = 0; i < n; i++) {
-    const raw = act.u[i * 4];
-    if (raw === 255) { out[i] = 0; prev = 1; continue; }
-    const k = raw & 0x0f;
-    let c = k === 9 ? 2 : k === 11 ? 3 : k === 0 ? prev : (k === 3 || k === 6) ? 0 : 1;
-    if ((c === 2 || c === 3) && act.u[i * 4 + 2] > 0) c = 1;   // passos = acordado
-    out[i] = c; if (c) prev = c; if (c >= 2) slept++;
+  const n = act.u.length / 4, out = new Uint8Array(n), off = new Uint8Array(n);   // out: 0 desconhecido, 1 acordado, 2 leve, 3 profundo
+  const I = i => act.u[i * 4 + 1], valid = i => act.u[i * 4] !== 255;
+  for (let i = 0; i < n;) {                                        // fora do pulso
+    if (valid(i) && I(i) === 0) {
+      let j = i; while (j < n && valid(j) && I(j) === 0) j++;
+      if (j - i >= 60) for (let k = i; k < j; k++) off[k] = 1;
+      i = j;
+    } else i++;
   }
-  if (slept > 60) return out;
-  // plano B: o relogio nao marcou sono -> estima pelo movimento (media de 15 min, sem passos)
-  const W = 7;
+  for (let i = 0; i < n; i++) if (!valid(i) || act.u[i * 4] === 0x73) off[i] = 1;
   for (let i = 0; i < n; i++) {
-    if (act.u[i * 4] === 255) { out[i] = 0; continue; }
-    let sum = 0, cnt = 0, steps = 0;
-    for (let j = Math.max(0, i - W); j <= Math.min(n - 1, i + W); j++) {
-      if (act.u[j * 4] === 255) continue;
-      sum += act.u[j * 4 + 1]; steps += act.u[j * 4 + 2]; cnt++;
-    }
-    const avg = cnt ? sum / cnt : 255;
+    if (off[i]) continue;
+    const a = Math.max(0, i - 15), b = Math.min(n, i + 16), w = []; let steps = 0;
+    for (let j = a; j < b; j++) if (!off[j]) { w.push(I(j)); steps += act.u[j * 4 + 2]; }
+    if (w.length < 10) { out[i] = 1; continue; }
     const h = new Date((act.t0 + i) * 60000).getHours();
-    const night = h >= 20 || h < 12;
-    out[i] = (!night || steps > 0 || avg > SLEEP_LIGHT) ? 1 : (avg <= SLEEP_DEEP ? 3 : 2);
+    w.sort((x, y) => x - y);
+    const med = w[w.length >> 1], zero = w.filter(x => x === 0).length / w.length;
+    if ((h >= 20 || h < 12) && steps <= 20 && med <= 4 && zero >= 0.55) {
+      let nz = 0; for (let j = Math.max(0, i - 10); j < Math.min(n, i + 11); j++) if (!off[j] && I(j) > 0) nz++;
+      out[i] = nz <= 2 ? 3 : 2;
+    } else out[i] = 1;
   }
   return out;
 }
-let SLEEP_LIGHT = 12, SLEEP_DEEP = 2;
 
 function actStats(act) {   // diagnostico: tipos brutos e intensidade
   const n = act.u.length / 4, kinds = {}; let imax = 0, isum = 0, cnt = 0;
