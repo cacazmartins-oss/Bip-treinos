@@ -623,14 +623,17 @@ $('#btnInst').onclick = async () => {
     if (instKind === 'fw' && !confirm('Instalar o FIRMWARE agora? Não feche esta página nem afaste o relógio até terminar.')) { btn.disabled = false; return; }
     const svc = await ble.srv.getPrimaryService(FW_SVC);
     const ctl = await svc.getCharacteristic(FW_CTL), data = await svc.getCharacteristic(FW_DATA);
-    const waiters = [];
+    const waiters = [], early = [];
     const onCtl = e => {
       const v = new Uint8Array(e.target.value.buffer.slice(0)); log('instalar ctl:', hex(v));
-      const w = waiters[0]; if (w && w(v)) waiters.shift();          // w devolve true se a resposta era a esperada
+      const w = waiters[0];
+      if (w) { if (w(v)) waiters.shift(); } else early.push(v);       // chegou antes de alguem esperar: guarda
     };
     ctl.addEventListener('characteristicvaluechanged', onCtl);
     await ctl.startNotifications();
     const expect = (cmd, ms) => new Promise((res, rej) => {
+      const i = early.findIndex(v => v[0] === 0x10 && v[1] === cmd);
+      if (i >= 0) { const v = early.splice(i, 1)[0]; return v[2] === 0x01 ? res(v) : rej(new Error('o relógio recusou (etapa ' + cmd + ': ' + hex(v) + ')')); }
       const t = setTimeout(() => rej(new Error('o relógio não respondeu (etapa ' + cmd + ')')), ms);
       waiters.push(v => {
         if (v[0] === 0x10 && v[1] !== cmd && v[2] === 0x01) return false;   // confirmacao de outra etapa (ex.: 10 03 01): ignora
@@ -661,7 +664,8 @@ $('#btnInst').onclick = async () => {
       }
       // 3) fim + conferencia
       msg('Conferindo…');
-      p = expect(0x00, 20000); await ctl.writeValue(Uint8Array.of(0x00)); await p;
+      // o relogio confirma o recebimento de todos os dados com "10 03 01" (resposta ao 0x03 do inicio)
+      p = expect(0x03, 30000); await ctl.writeValue(Uint8Array.of(0x00)); await p;
       const crc = crc16(b);
       p = expect(0x04, 20000); await ctl.writeValue(Uint8Array.of(0x04, crc & 255, crc >> 8)); await p;
       progress('#instBar', 1);
