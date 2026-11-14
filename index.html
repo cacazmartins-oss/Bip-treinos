@@ -188,6 +188,13 @@
       <div class="row"><button id="btnLiftOn" class="grow">Ligar</button><button id="btnLiftOff" class="grow">Desligar</button></div>
       <p class="muted" id="liftMsg" style="margin:6px 0 0"></p>
     </div>
+    <h2>Diagnóstico da Música</h2>
+    <div class="card">
+      <p class="muted" style="margin:0 0 8px">Depois de abrir o app Música no relógio (por ~1 minuto), abra o Sincronizar e baixe o registro. Mande o arquivo .txt para análise.</p>
+      <button id="btnMusLog" style="width:100%">Baixar registro da Música</button>
+      <div class="bar" id="musBar" hidden><i></i></div>
+      <p class="muted" id="musMsg" style="margin:6px 0 0"></p>
+    </div>
     <h2>Parear</h2>
     <p class="muted">Se o Registro disser "autenticação falhou", o relógio está com a chave de outro app (o Zepp). Toque abaixo, escolha o relógio e <b>confirme no relógio</b> quando ele pedir. A chave passa a ser a padrão do Gadgetbridge, então ele continua funcionando; o Zepp deixa de conectar.</p>
     <button id="btnPair" class="pri">Parear este app com o relógio</button>
@@ -809,6 +816,34 @@ $('#btnSleepCsv').onclick = () => {
     rows.push([k, act.u[i * 4].toString(16).padStart(2, '0'), act.u[i * 4 + 1], act.u[i * 4 + 2], act.u[i * 4 + 3] === 255 ? '' : act.u[i * 4 + 3]].join(';'));
   }
   download('sono_minutos.csv', '﻿' + rows.join('\n'), 'text/csv');
+};
+
+const GTL_NAMES = { 0x3000: 'GATTC_CMP_EVT', 0x3001: 'GATTC_EXC_MTU_CMD', 0x3002: 'GATTC_MTU_CHANGED_IND', 0x3003: 'GATTC_DISC_CMD',
+  0x3004: 'GATTC_DISC_SVC_IND', 0x3006: 'GATTC_DISC_CHAR_IND', 0x3008: 'GATTC_READ_CMD', 0x3009: 'GATTC_READ_IND',
+  0x300A: 'GATTC_WRITE_CMD', 0x300C: 'GATTC_EVENT_IND', 0x300D: 'GATTC_SEND_EVT_CMD', 0x300E: 'GATTC_SVC_CHANGED_CFG_IND',
+  0x3010: 'GATTC_WRITE_CMD_IND', 0x3011: 'GATTC_WRITE_CMD_CFM', 0x3800: 'GAPC_CMP_EVT' };
+$('#btnMusLog').onclick = async () => {
+  const btn = $('#btnMusLog'); btn.disabled = true;
+  const msg = t => { $('#musMsg').textContent = t; };
+  try {
+    const size = await rawSelect('M');
+    const h = await rawRead(0, 16), hv = new DataView(h.buffer);
+    if (hv.getUint32(0, true) !== 0x31474C4D) throw new Error('nenhum registro (abra o app Música v9 no relógio primeiro)');
+    const n = hv.getUint16(4, true);
+    msg(`Baixando ${n} mensagens…`);
+    const b = await rawRead(16, n * 16, '#musBar'), dv = new DataView(b.buffer);
+    const hx = a => Array.from(a, x => x.toString(16).padStart(2, '0')).join(' ');
+    const lines = [`Registro do app Música — ${n} mensagens — baixado em ${new Date().toLocaleString('pt-BR')}`,
+                   'tempo_s  dir  id    nome                       len  dados(10 bytes)'];
+    for (let i = 0; i < n; i++) {
+      const o = i * 16, t = dv.getUint16(o, true) / 100, id = dv.getUint16(o + 2, true), tx = b[o + 4] & 1, len = b[o + 5];
+      lines.push(`${t.toFixed(2).padStart(7)}  ${tx ? 'TX' : 'RX'}  ${id.toString(16).padStart(4, '0')}  ${(GTL_NAMES[id] || '').padEnd(26)} ${String(len).padStart(3)}  ${hx(b.subarray(o + 6, o + 16))}`);
+    }
+    download('musica_registro.txt', lines.join('\n'), 'text/plain');
+    progress('#musBar', null);
+    msg(`✓ ${n} mensagens. Arquivo musica_registro.txt baixado.`);
+  } catch (e) { msg('✗ ' + e.message); log('erro registro musica:', e.message); progress('#musBar', null); }
+  btn.disabled = false;
 };
 
 let wantConnected = false;
