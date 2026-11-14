@@ -100,6 +100,14 @@
       <button id="btnCsv" class="grow" disabled>Exportar CSV</button>
     </div>
     <div class="bar" id="readBar" hidden><i></i></div>
+    <div class="card">
+      <b>Percurso completo do último treino</b>
+      <p class="muted" style="margin:4px 0 8px">GPS, FC e elevação a cada 5 s. Gera um arquivo GPX para importar no Strava (strava.com → Enviar atividade → Arquivo).</p>
+      <button id="btnTrack" style="width:100%">Baixar percurso e exportar GPX</button>
+      <div class="bar" id="trackBar" hidden><i></i></div>
+      <p class="muted" id="trackMsg" style="margin:6px 0 0"></p>
+      <div id="trackSplits"></div>
+    </div>
     <p class="muted" id="readMsg">No relógio: abra o app Sincronizar.</p>
     <div id="results"></div>
     <button id="btnClear" class="ghost" hidden>Apagar histórico do relógio…</button>
@@ -114,7 +122,7 @@
       <div class="grow"><label for="gWeight">Peso (kg)</label><input id="gWeight" type="number" step="0.1" min="30" max="250" value="75"></div>
     </div>
     <h2>Treino de academia</h2>
-    <textarea id="gymText" placeholder="Um exercício por linha: nome, séries x repetições, carga e descanso. Ex.:&#10;Supino reto 4x10 60kg 90s&#10;Remada curvada 3x12 1min&#10;Agachamento 4x8 80kg 2'&#10;Prancha 3x 45s"></textarea>
+    <textarea id="gymText" placeholder="Até 6 treinos. Uma linha com o nome do treino e, embaixo, um exercício por linha (séries x repetições, carga, descanso). Ex.:&#10;Treino A - Peito&#10;Supino reto 4x10 60kg 90s&#10;Crucifixo 3x12 1min&#10;Treino B - Perna&#10;Agachamento 4x8 80kg 2'&#10;Prancha 3x 45s"></textarea>
     <div class="row" style="margin-top:8px">
       <button id="btnGymParse" class="grow">Interpretar</button>
       <button id="btnGymSend" class="pri grow" disabled>Enviar ao relógio</button>
@@ -128,6 +136,8 @@
       <button id="btnGymCsv" class="grow" disabled>Exportar CSV</button>
     </div>
     <p class="muted" id="gymReadMsg"></p>
+    <button id="btnGymTcx" style="width:100%;margin-top:6px">Exportar o último treino (TCX, para o Strava)</button>
+    <p class="muted" id="gymTcxMsg"></p>
     <div id="gymResults"></div>
   </section>
 
@@ -135,6 +145,7 @@
   <section id="tab-sono">
     <div class="row" style="margin-top:4px">
       <button id="btnSleep" class="pri grow">Baixar do relógio</button>
+      <button id="btnSleepCsv" class="grow">Exportar CSV</button>
     </div>
     <div class="bar" id="sleepBar" hidden><i></i></div>
     <p class="muted" id="sleepMsg">Não precisa abrir nenhum app no relógio — só conectar.</p>
@@ -685,6 +696,121 @@ $('#btnInst').onclick = async () => {
   btn.disabled = false;
 };
 
+/* ---------------------------------------------------------------- exportacoes (GPX / TCX / CSV) */
+function download(name, text, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+}
+// hora local do relogio gravada "como se fosse UTC" -> instante real
+const watchToDate = ts => new Date(ts * 1000 + new Date(ts * 1000).getTimezoneOffset() * 60000);
+async function rawSelect(app) {
+  const v = await req([ch('A'), ch(app)], ch('a'));
+  if (!v[2]) throw new Error(app === 'T' ? 'o app Treinos não foi encontrado' : 'o app Academia não foi encontrado');
+  return v[3] | v[4] << 8;
+}
+async function rawRead(ofs, n, bar) {
+  const out = new Uint8Array(n);
+  for (let o = 0; o < n; o += 17) {
+    const k = Math.min(17, n - o), a = ofs + o;
+    const v = await req([ch('Q'), a & 255, a >> 8, k], ch('q'));
+    out.set(v.subarray(3, 3 + k), o);
+    if (bar) progress(bar, (o + k) / n);
+  }
+  return out;
+}
+
+$('#btnTrack').onclick = async () => {
+  const btn = $('#btnTrack'); btn.disabled = true;
+  const msg = t => { $('#trackMsg').textContent = t; };
+  try {
+    const size = await rawSelect('T');
+    const OFS = 16 + 8 * 504 + 10 * 340;                       // treino_fmt.h: OFS_TRACK
+    if (size < OFS + 24) throw new Error('o Treinos instalado é antigo (sem gravação de percurso)');
+    const h = await rawRead(OFS, 24), hv = new DataView(h.buffer);
+    if (hv.getUint32(0, true) !== 0x314B5254) throw new Error('nenhum percurso gravado (termine um treino com o Treinos novo)');
+    const ts = hv.getUint32(4, true), lat0 = hv.getInt32(8, true), lon0 = hv.getInt32(12, true), n = hv.getUint16(16, true), every = h[18] || 5;
+    msg(`Baixando ${n} pontos…`);
+    const b = await rawRead(OFS + 24, n * 8, '#trackBar'), dv = new DataView(b.buffer);
+    const t0 = watchToDate(ts).getTime(), pts = [];
+    for (let i = 0; i < n; i++) {
+      const o = i * 8, ok = b[o + 7] & 1;
+      pts.push({ t: new Date(t0 + i * every * 1000), ok,
+        lat: (lat0 + dv.getInt16(o, true) * 10) / 3e6, lon: (lon0 + dv.getInt16(o + 2, true) * 10) / 3e6,
+        hr: b[o + 4], ele: dv.getInt8(o + 5), step: b[o + 6] });
+    }
+    // parciais por km
+    const R = 6371000, rad = x => x * Math.PI / 180;
+    let dist = 0, last = null, kmT = 0, km = 1; const splits = [];
+    for (const p of pts) {
+      if (!p.ok) continue;
+      if (last) { const dl = rad(p.lat - last.lat), dn = rad(p.lon - last.lon) * Math.cos(rad(p.lat)); dist += R * Math.hypot(dl, dn); }
+      last = p;
+      if (dist >= km * 1000) { const sec = (p.t - pts[0].t) / 1000; splits.push(sec - kmT); kmT = sec; km++; }
+    }
+    $('#trackSplits').innerHTML = splits.length ? '<table><tr><th>km</th><th>ritmo</th></tr>' +
+      splits.map((s, i) => `<tr><td>${i + 1}</td><td>${Treinos.mmss(Math.round(s))}</td></tr>`).join('') + '</table>' : '';
+    const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Bip Treinos" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
+<metadata><time>${pts[0] ? pts[0].t.toISOString() : new Date().toISOString()}</time></metadata>
+<trk><name>Corrida - Bip Treinos</name><type>running</type><trkseg>
+${pts.filter(p => p.ok).map(p => `<trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}"><ele>${p.ele}</ele><time>${p.t.toISOString()}</time>${p.hr ? `<extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>${p.hr}</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>` : ''}</trkpt>`).join('\n')}
+</trkseg></trk></gpx>`;
+    const d = watchToDate(ts);
+    download(`corrida_${d.toISOString().slice(0, 16).replace(/[:T]/g, '-')}.gpx`, gpx, 'application/gpx+xml');
+    progress('#trackBar', null);
+    msg(`✓ ${n} pontos, ${(dist / 1000).toFixed(2)} km. Arquivo GPX baixado.`);
+  } catch (e) { msg('✗ ' + e.message); log('erro percurso:', e.message); progress('#trackBar', null); }
+  btn.disabled = false;
+};
+
+$('#btnGymTcx').onclick = async () => {
+  const btn = $('#btnGymTcx'); btn.disabled = true;
+  const msg = t => { $('#gymTcxMsg').textContent = t; };
+  try {
+    const size = await rawSelect('G');
+    const OFS = 16 + 6 * 20 + 6 * 12 * 24 + 10 * 28;            // academia_fmt.h: GYM_OFS_LOG
+    if (size < OFS + 16) throw new Error('a Academia instalada é antiga (sem registro detalhado)');
+    const h = await rawRead(OFS, 16), hv = new DataView(h.buffer);
+    if (hv.getUint32(0, true) !== 0x31474C47) throw new Error('nenhum treino detalhado gravado ainda');
+    const ts = hv.getUint32(4, true), nhr = hv.getUint16(8, true), nev = hv.getUint16(10, true), every = h[12] || 10, plan = h[13];
+    msg('Baixando…');
+    const hr = await rawRead(OFS + 16, nhr), ev = nev ? await rawRead(OFS + 16 + 720, nev * 4) : new Uint8Array(0);
+    const t0 = watchToDate(ts).getTime(), dur = Math.max(nhr * every, 1);
+    const last = gymResults.find(r => r.start === ts);
+    const names = store.get('gymNames', []), pl = Array.isArray(names) && names[plan] && names[plan].ex ? names[plan] : { name: 'Academia', ex: [] };
+    const hrs = Array.from(hr).filter(x => x), avg = hrs.length ? Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length) : 0;
+    const iso = ms => new Date(ms).toISOString();
+    const evs = []; for (let i = 0; i < nev; i++) evs.push({ t: ev[i * 4] | ev[i * 4 + 1] << 8, ex: ev[i * 4 + 2], set: ev[i * 4 + 3] });
+    const notes = evs.map(e => `${Treinos.mmss(e.t)} ${pl.ex[e.ex] || 'Exercício ' + (e.ex + 1)} série ${e.set}`).join('\n');
+    const tcx = `<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
+<Activities><Activity Sport="Other"><Id>${iso(t0)}</Id>
+<Lap StartTime="${iso(t0)}"><TotalTimeSeconds>${dur}</TotalTimeSeconds><DistanceMeters>0</DistanceMeters>
+<Calories>${last ? last.kcal : 0}</Calories>${avg ? `<AverageHeartRateBpm><Value>${avg}</Value></AverageHeartRateBpm><MaximumHeartRateBpm><Value>${Math.max(...hrs)}</Value></MaximumHeartRateBpm>` : ''}
+<Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>
+${Array.from(hr).map((v, i) => `<Trackpoint><Time>${iso(t0 + i * every * 1000)}</Time>${v ? `<HeartRateBpm><Value>${v}</Value></HeartRateBpm>` : ''}</Trackpoint>`).join('\n')}
+</Track><Notes>${esc(notes)}</Notes></Lap>
+<Notes>${esc(pl.name)}</Notes></Activity></Activities></TrainingCenterDatabase>`;
+    download(`academia_${new Date(t0).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.tcx`, tcx, 'application/vnd.garmin.tcx+xml');
+    msg(`✓ ${pl.name}: ${Treinos.mmss(dur)}, ${evs.length} séries, FC média ${avg || '–'}. No Strava, mude o tipo para "Musculação".`);
+  } catch (e) { msg('✗ ' + e.message); log('erro academia tcx:', e.message); }
+  btn.disabled = false;
+};
+
+$('#btnSleepCsv').onclick = () => {
+  const act = loadAct();
+  if (!act) { $('#sleepMsg').textContent = 'Baixe os dados do relógio primeiro.'; return; }
+  const n = act.u.length / 4, rows = ['data_hora;tipo_hex;intensidade;passos;fc'];
+  for (let i = 0; i < n; i++) {
+    if (act.u[i * 4] === 255) continue;
+    const d = new Date((act.t0 + i) * 60000);
+    const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' +
+              String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    rows.push([k, act.u[i * 4].toString(16).padStart(2, '0'), act.u[i * 4 + 1], act.u[i * 4 + 2], act.u[i * 4 + 3] === 255 ? '' : act.u[i * 4 + 3]].join(';'));
+  }
+  download('sono_minutos.csv', '﻿' + rows.join('\n'), 'text/csv');
+};
+
 let wantConnected = false;
 async function openLink(pair = false) {
   setConn(false, 'conectando…');
@@ -918,8 +1044,9 @@ $('#btnClear').onclick = async () => {
 };
 
 /* ---------------------------------------------------------------- academia */
-// formato: watch/academia_fmt.h (header 16 + 16 exercicios x 24 + 10 resultados x 28 = 680 bytes)
-const GYM = { MAGIC: 0x314D5947, MAX_EX: 16, MAX_RES: 10, NAME: 18, OFS_EX: 16, OFS_RES: 16 + 16 * 24, RES: 28 };
+// formato: watch/academia_fmt.h (header 16 + 6 treinos x 20 + 6x12 exercicios x 24 + 10 resultados x 28 = 2144 bytes)
+const GYM = { MAGIC: 0x324D5947, MAX_PLANS: 6, MAX_EX: 12, MAX_RES: 10, NAME: 18, PLAN_NAME: 16, RES: 28,
+  OFS_PLAN: p => 16 + p * 20, OFS_EX: (p, i) => 16 + 6 * 20 + (p * 12 + i) * 24, OFS_RES: 16 + 6 * 20 + 6 * 12 * 24 };
 let gymPlan = store.get('gymPlan', null), gymResults = store.get('gymResults', []);
 const prof = store.get('profile', { sex: 0, age: 30, weight: 75 });
 $('#gSex').value = prof.sex; $('#gAge').value = prof.age; $('#gWeight').value = prof.weight;
@@ -927,11 +1054,14 @@ $('#gSex').value = prof.sex; $('#gAge').value = prof.age; $('#gWeight').value = 
 $('#gymText').value = store.get('gymText', '');
 
 function parseGym(text) {
-  const out = [];
+  const plans = []; let cur = null;
   for (let raw of text.split(/\r?\n/)) {
     let line = raw.replace(/ /g, ' ').trim(); if (!line) continue;
     const sr = line.match(/(\d+)\s*[xX×]\s*(?:(\d+)(?!\d)(?!\s*(?:s\b|seg|"|”|min|'|’|:\d)))?/);
-    if (!sr) continue;
+    if (!sr) {                                                   // linha sem "NxM": nome de um novo treino
+      cur = { name: line.replace(/[:\-–]+\s*$/, '').trim(), ex: [] }; plans.push(cur); continue;
+    }
+    if (!cur) { cur = { name: 'Treino', ex: [] }; plans.push(cur); }
     let name = line.slice(0, sr.index).replace(/[-–:•*·]+\s*$/, '').replace(/^[-–•*·\d.)\s]+/, '').trim() || 'Exercício';
     const rest = line.slice(sr.index + sr[0].length);
     const kg = rest.match(/(\d+(?:[.,]\d+)?)\s*kg/i);
@@ -942,25 +1072,27 @@ function parseGym(text) {
     if (mmss) restS = +mmss[1] * 60 + +mmss[2];
     else if (secs) restS = +secs[1];
     else if (mins) restS = Math.round(parseFloat(mins[1].replace(',', '.')) * 60);
-    out.push({ name, sets: Math.min(20, +sr[1]), reps: sr[2] ? Math.min(255, +sr[2]) : 0,
-               rest: Math.min(900, restS), load: kg ? parseFloat(kg[1].replace(',', '.')) : 0 });
+    if (cur.ex.length < GYM.MAX_EX)
+      cur.ex.push({ name, sets: Math.min(20, +sr[1]), reps: sr[2] ? Math.min(255, +sr[2]) : 0,
+                    rest: Math.min(900, restS), load: kg ? parseFloat(kg[1].replace(',', '.')) : 0 });
   }
-  return out.slice(0, GYM.MAX_EX);
+  return plans.filter(p => p.ex.length).slice(0, GYM.MAX_PLANS);
 }
 
 function renderGymPlan() {
   const el = $('#gymPlan');
+  if (gymPlan && gymPlan.length && !gymPlan[0].ex) gymPlan = null;          // formato antigo (1 treino)
   $('#btnGymSend').disabled = !(gymPlan && gymPlan.length);
   if (!gymPlan || !gymPlan.length) { el.innerHTML = ''; return; }
-  el.innerHTML = '<div class="card">' + gymPlan.map((e, i) => `<div class="row" style="margin:4px 0">
+  el.innerHTML = gymPlan.map(p => '<div class="card"><b>' + esc(p.name) + '</b>' + p.ex.map((e, i) => `<div class="row" style="margin:4px 0">
       <span class="grow">${i + 1}. ${esc(e.name)}</span>
-      <span class="muted">${e.sets}x${e.reps || 'livre'}${e.load ? ' · ' + e.load + ' kg' : ''} · ${Treinos.mmss(e.rest)}</span></div>`).join('') + '</div>';
+      <span class="muted">${e.sets}x${e.reps || 'livre'}${e.load ? ' · ' + e.load + ' kg' : ''} · ${Treinos.mmss(e.rest)}</span></div>`).join('') + '</div>').join('');
 }
 
 $('#btnGymParse').onclick = () => {
   store.set('gymText', $('#gymText').value);
   gymPlan = parseGym($('#gymText').value); store.set('gymPlan', gymPlan);
-  $('#gymMsg').textContent = gymPlan.length ? `${gymPlan.length} exercício(s). Confira e envie.` : 'Não encontrei exercícios. Use o formato "Nome 4x10 60kg 90s".';
+  $('#gymMsg').textContent = gymPlan.length ? `${gymPlan.length} treino(s), ${gymPlan.reduce((a, p) => a + p.ex.length, 0)} exercício(s). Confira e envie.` : 'Não encontrei exercícios. Use o formato "Nome 4x10 60kg 90s".';
   renderGymPlan();
 };
 
@@ -986,27 +1118,32 @@ $('#btnGymSend').onclick = async () => {
     await gymSelect();
     const old = await gymReadBytes(0, 16), odv = new DataView(old.buffer);
     const keep = odv.getUint32(0, true) === GYM.MAGIC;
-    const n = gymPlan.length, img = new Uint8Array(16 + n * 24), dv = new DataView(img.buffer);
     const p = { sex: +$('#gSex').value, age: +$('#gAge').value, weight: +$('#gWeight').value };
-    dv.setUint32(0, GYM.MAGIC, true); img[4] = 1; img[5] = n; img[6] = p.sex; img[7] = Math.min(99, p.age);
-    dv.setUint16(8, Math.round(p.weight * 10), true);
-    img[10] = keep && old[10] <= GYM.MAX_RES ? old[10] : 0; img[11] = keep && old[11] < GYM.MAX_RES ? old[11] : 0;
-    gymPlan.forEach((e, i) => {
-      const o = 16 + i * 24;
-      img.set(utf8Trunc(e.name, GYM.NAME - 1), o);
-      img[o + 18] = e.sets; img[o + 19] = e.reps; dv.setUint16(o + 20, e.rest, true); dv.setUint16(o + 22, Math.round(e.load * 10), true);
+    const hdr = new Uint8Array(16), hv = new DataView(hdr.buffer);
+    hv.setUint32(0, GYM.MAGIC, true); hdr[4] = 2; hdr[5] = gymPlan.length; hdr[6] = p.sex; hdr[7] = Math.min(99, p.age);
+    hv.setUint16(8, Math.round(p.weight * 10), true);
+    hdr[10] = keep && old[10] <= GYM.MAX_RES ? old[10] : 0; hdr[11] = keep && old[11] < GYM.MAX_RES ? old[11] : 0;
+    const table = new Uint8Array(GYM.MAX_PLANS * 20);
+    gymPlan.forEach((pl, k) => { table.set(utf8Trunc(pl.name, GYM.PLAN_NAME - 1), k * 20); table[k * 20 + 16] = pl.ex.length; });
+    const blocks = [{ ofs: GYM.OFS_PLAN(0), data: table }];
+    gymPlan.forEach((pl, k) => {
+      const b = new Uint8Array(pl.ex.length * 24), dv = new DataView(b.buffer);
+      pl.ex.forEach((e, i) => { const o = i * 24; b.set(utf8Trunc(e.name, GYM.NAME - 1), o);
+        b[o + 18] = e.sets; b[o + 19] = e.reps; dv.setUint16(o + 20, e.rest, true); dv.setUint16(o + 22, Math.round(e.load * 10), true); });
+      blocks.push({ ofs: GYM.OFS_EX(k, 0), data: b });
     });
-    // exercicios primeiro, cabecalho por ultimo
-    const order = []; for (let o = 16; o < img.length; o += 17) order.push(o); order.push(0);
+    blocks.push({ ofs: 0, data: hdr });                       // cabecalho por ultimo
+    const frames = [];
+    for (const bl of blocks) for (let o = 0; o < bl.data.length; o += 17) frames.push([bl.ofs + o, bl.data.subarray(o, Math.min(bl.data.length, o + 17))]);
     let k = 0;
-    for (const o of order) {
-      const end = o === 0 ? 16 : Math.min(img.length, o + 17);
-      const v = await req([ch('P'), o & 255, o >> 8, ...img.subarray(o, end)], ch('p'));
+    for (const [ofs, d] of frames) {
+      const v = await req([ch('P'), ofs & 255, ofs >> 8, ...d], ch('p'));
       if (!v[3]) throw new Error('o relógio recusou a gravação');
-      progress('#gymBar', ++k / order.length);
+      progress('#gymBar', ++k / frames.length);
     }
-    store.set('gymNames', gymPlan.map(e => e.name));
-    $('#gymMsg').textContent = `✓ ${n} exercício(s) no relógio. Aperte o botão do relógio para sair do Sincronizar.`;
+    const n = gymPlan.length;
+    store.set('gymNames', gymPlan.map(pl => ({ name: pl.name, ex: pl.ex.map(e => e.name) })));
+    $('#gymMsg').textContent = `✓ ${n} treino(s) no relógio. Aperte o botão do relógio para sair do Sincronizar.`;
   } catch (e) { $('#gymMsg').textContent = '✗ ' + e.message; log('erro academia:', e.message); }
   progress('#gymBar', null); btn.disabled = false;
 };
@@ -1016,7 +1153,7 @@ function renderGymResults() {
   $('#gymResults').innerHTML = gymResults.slice().reverse().map(r => {
     const d = new Date(r.start * 1000);
     const when = d.toLocaleDateString('pt-BR', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('pt-BR', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' });
-    return `<div class="card"><div class="row"><b class="grow">Academia</b><span class="muted">${when}</span></div>
+    return `<div class="card"><div class="row"><b class="grow">${esc(r.plan || 'Academia')}</b><span class="muted">${when}</span></div>
       <div class="kpis"><div><b>${fmtTime(r.dur)}</b><span>tempo</span></div><div><b>${r.kcal}</b><span>kcal</span></div>
       <div><b>${r.avg || '–'}</b><span>FC méd.</span></div><div><b>${r.sets}</b><span>séries</span></div></div>
       <details><summary class="muted" style="margin-top:8px">Exercícios</summary><table><tr><th>exercício</th><th>séries</th></tr>
@@ -1036,7 +1173,9 @@ $('#btnGymRead').onclick = async () => {
     for (let i = 0; i < n; i++) {
       const slot = (next + GYM.MAX_RES - n + i) % GYM.MAX_RES;
       const b = await gymReadBytes(GYM.OFS_RES + slot * GYM.RES, GYM.RES), v = new DataView(b.buffer);
-      const r = { start: v.getUint32(0, true), dur: v.getUint16(4, true), kcal: v.getUint16(6, true), avg: b[8], max: b[9], sets: b[11], done: Array.from(b.subarray(12, 28)), names };
+      const pl = Array.isArray(names) && names[b[10]] && names[b[10]].ex ? names[b[10]] : { name: 'Treino ' + (b[10] + 1), ex: [] };
+      const r = { start: v.getUint32(0, true), dur: v.getUint16(4, true), kcal: v.getUint16(6, true), avg: b[8], max: b[9], sets: b[11],
+                  done: Array.from(b.subarray(12, 24)), plan: pl.name, names: pl.ex };
       $('#gymReadMsg').textContent = `Lendo ${i + 1}/${n}…`;
       if (!seen.has(r.start)) { gymResults.push(r); novos++; }
     }
@@ -1048,11 +1187,11 @@ $('#btnGymRead').onclick = async () => {
 };
 
 $('#btnGymCsv').onclick = () => {
-  const rows = [['data', 'duracao_s', 'kcal', 'fc_media', 'fc_max', 'series', 'exercicio', 'series_feitas']];
+  const rows = [['data', 'treino', 'duracao_s', 'kcal', 'fc_media', 'fc_max', 'series', 'exercicio', 'series_feitas']];
   for (const r of gymResults) {
     const d = new Date(r.start * 1000).toISOString().slice(0, 16).replace('T', ' ');
-    rows.push([d, r.dur, r.kcal, r.avg, r.max, r.sets, 'total', '']);
-    r.done.forEach((s, i) => s && rows.push([d, '', '', '', '', '', (r.names || [])[i] || 'Exercício ' + (i + 1), s]));
+    rows.push([d, r.plan || '', r.dur, r.kcal, r.avg, r.max, r.sets, 'total', '']);
+    r.done.forEach((s, i) => s && rows.push([d, r.plan || '', '', '', '', '', '', (r.names || [])[i] || 'Exercício ' + (i + 1), s]));
   }
   const csv = rows.map(r => r.map(x => /[",;\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : x).join(';')).join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = 'academia_bip.csv'; a.click();
