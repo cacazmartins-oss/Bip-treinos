@@ -106,32 +106,29 @@
   </section>
 
   <!-- ======================= CALENDARIO ======================= -->
-  <section id="tab-cal">
-    <h2>Novo compromisso</h2>
-    <div class="card">
-      <label for="evTitle">Título</label>
-      <input id="evTitle" maxlength="23" placeholder="Ex.: Dentista">
-      <div class="row">
-        <div class="grow"><label for="evDate">Data</label><input id="evDate" type="date"></div>
-        <div class="grow"><label for="evTime">Hora (vazio = dia todo)</label><input id="evTime" type="time"></div>
-      </div>
-      <label for="evColor">Cor</label>
-      <select id="evColor">
-        <option value="0">Branco</option><option value="1">Verde (treino)</option>
-        <option value="2">Amarelo</option><option value="3">Azul</option>
-      </select>
-      <div class="row" style="margin-top:10px">
-        <button id="btnAddEv" class="grow">Adicionar</button>
-        <button id="btnPlanEv" class="grow" title="Coloca os treinos interpretados nos próximos dias">+ Treinos da semana</button>
-      </div>
+  <section id="tab-gym">
+    <h2>Seu perfil (para as calorias)</h2>
+    <div class="card row">
+      <div class="grow"><label for="gSex">Sexo</label><select id="gSex"><option value="0">Masculino</option><option value="1">Feminino</option></select></div>
+      <div class="grow"><label for="gAge">Idade</label><input id="gAge" type="number" min="10" max="99" value="30"></div>
+      <div class="grow"><label for="gWeight">Peso (kg)</label><input id="gWeight" type="number" step="0.1" min="30" max="250" value="75"></div>
     </div>
+    <h2>Treino de academia</h2>
+    <textarea id="gymText" placeholder="Um exercício por linha: nome, séries x repetições, carga e descanso. Ex.:&#10;Supino reto 4x10 60kg 90s&#10;Remada curvada 3x12 1min&#10;Agachamento 4x8 80kg 2'&#10;Prancha 3x 45s"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button id="btnGymParse" class="grow">Interpretar</button>
+      <button id="btnGymSend" class="pri grow" disabled>Enviar ao relógio</button>
+    </div>
+    <div class="bar" id="gymBar" hidden><i></i></div>
+    <p class="muted" id="gymMsg">No relógio: abra o app Sincronizar.</p>
+    <div id="gymPlan"></div>
+    <h2>Treinos feitos</h2>
     <div class="row">
-      <h2 class="grow">Próximos (<span id="evCount">0</span>/48)</h2>
-      <button id="btnSendCal" class="pri" style="margin-top:8px">Enviar ao relógio</button>
+      <button id="btnGymRead" class="grow">Baixar do relógio</button>
+      <button id="btnGymCsv" class="grow" disabled>Exportar CSV</button>
     </div>
-    <div class="bar" id="calBar" hidden><i></i></div>
-    <p class="muted" id="calMsg">No relógio: abra o app Sincronizar.</p>
-    <div id="events"></div>
+    <p class="muted" id="gymReadMsg"></p>
+    <div id="gymResults"></div>
   </section>
 
   <!-- ======================= AJUDA ======================= -->
@@ -173,6 +170,13 @@
       <li>💻 Se ainda não aparecer, procure sem filtro e veja se surge algum "Amazfit" ou "Bip":</li>
     </ol>
     <button id="btnConnAll">Procurar todos os dispositivos</button>
+    <h2>Ajustes do relógio</h2>
+    <div class="card">
+      <b>Acender a tela ao girar o pulso</b>
+      <p class="muted" style="margin:4px 0 8px">O mesmo ajuste do Zepp. Vale para o relógio todo, inclusive durante os treinos.</p>
+      <div class="row"><button id="btnLiftOn" class="grow">Ligar</button><button id="btnLiftOff" class="grow">Desligar</button></div>
+      <p class="muted" id="liftMsg" style="margin:6px 0 0"></p>
+    </div>
     <h2>Parear</h2>
     <p class="muted">Se o Registro disser "autenticação falhou", o relógio está com a chave de outro app (o Zepp). Toque abaixo, escolha o relógio e <b>confirme no relógio</b> quando ele pedir. A chave passa a ser a padrão do Gadgetbridge, então ele continua funcionando; o Zepp deixa de conectar.</p>
     <button id="btnPair" class="pri">Parear este app com o relógio</button>
@@ -180,7 +184,7 @@
     <p class="muted">Deixe vazio para usar a chave padrão do Gadgetbridge. Se o relógio foi pareado com outra chave, cole aqui os 32 caracteres (0x…).</p>
     <input id="authKey" placeholder="padrão do Gadgetbridge" autocomplete="off">
     <h2>Limites</h2>
-    <p class="muted">Até 8 treinos com 40 etapas cada (as repetições contam: 8×(800+200) = 16 etapas). O relógio guarda os últimos 10 resultados. Calendário: 48 compromissos.</p>
+    <p class="muted">Até 8 treinos com 40 etapas cada (as repetições contam: 8×(800+200) = 16 etapas). O relógio guarda os últimos 10 resultados de corrida e 10 de academia. Academia: até 16 exercícios.</p>
     <h2>Registro</h2>
     <div class="card"><div id="log"></div></div>
   </section>
@@ -189,7 +193,7 @@
 <nav>
   <button data-tab="treinos" class="on"><svg viewBox="0 0 24 24"><path d="M13 4a2 2 0 1 0 0 .1M7 21l3-6 3 2v5M10 15l1-5 4 3 3-1M8 10l3-2"/></svg>Treinos</button>
   <button data-tab="res"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resultados</button>
-  <button data-tab="cal"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendário</button>
+  <button data-tab="gym"><svg viewBox="0 0 24 24"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>Academia</button>
   <button data-tab="sono"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Sono</button>
   <button data-tab="inst"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>Instalar</button>
   <button data-tab="help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5v.1"/></svg>Ajuda</button>
@@ -763,7 +767,7 @@ const ch = c => c.charCodeAt(0);
 async function detectApp() {
   let tr = false, cal = false;
   try { const v = await req([ch('H')], ch('h'), 900, 2); tr = true; log('Treinos:', JSON.stringify(Treinos.readHeader(v.subarray(1)))); } catch (e) {}
-  try { const v = await req([ch('G')], ch('g'), 900, 2); cal = true; log('Calendário, eventos:', v[5]); } catch (e) {}
+  try { const v = await req([ch('A'), ch('G')], ch('a'), 900, 2); cal = !!v[2]; log('Academia:', v[2] ? 'encontrada' : 'não instalada'); } catch (e) {}
   setConn(true, tr || cal ? 'relógio pronto ✓' : 'abra o app Sincronizar no relógio');
   return tr || cal;
 }
@@ -913,81 +917,146 @@ $('#btnClear').onclick = async () => {
   catch (e) { $('#readMsg').textContent = '✗ ' + e.message; }
 };
 
-/* ---------------------------------------------------------------- calendario */
-let events = store.get('events', []);
-const COLORS = ['#ffffff', '#3ddc84', '#f5c542', '#4fb3ff'];
-const todayIso = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
-$('#evDate').value = todayIso();
+/* ---------------------------------------------------------------- academia */
+// formato: watch/academia_fmt.h (header 16 + 16 exercicios x 24 + 10 resultados x 28 = 680 bytes)
+const GYM = { MAGIC: 0x314D5947, MAX_EX: 16, MAX_RES: 10, NAME: 18, OFS_EX: 16, OFS_RES: 16 + 16 * 24, RES: 28 };
+let gymPlan = store.get('gymPlan', null), gymResults = store.get('gymResults', []);
+const prof = store.get('profile', { sex: 0, age: 30, weight: 75 });
+$('#gSex').value = prof.sex; $('#gAge').value = prof.age; $('#gWeight').value = prof.weight;
+['#gSex', '#gAge', '#gWeight'].forEach(id => $(id).onchange = () => store.set('profile', { sex: +$('#gSex').value, age: +$('#gAge').value, weight: +$('#gWeight').value }));
+$('#gymText').value = store.get('gymText', '');
 
-function upcoming() {
-  const cut = new Date(); cut.setDate(cut.getDate() - 7);
-  const c = cut.toISOString().slice(0, 10);
-  return events.filter(e => e.date >= c).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+function parseGym(text) {
+  const out = [];
+  for (let raw of text.split(/\r?\n/)) {
+    let line = raw.replace(/ /g, ' ').trim(); if (!line) continue;
+    const sr = line.match(/(\d+)\s*[xX×]\s*(?:(\d+)(?!\d)(?!\s*(?:s\b|seg|"|”|min|'|’|:\d)))?/);
+    if (!sr) continue;
+    let name = line.slice(0, sr.index).replace(/[-–:•*·]+\s*$/, '').replace(/^[-–•*·\d.)\s]+/, '').trim() || 'Exercício';
+    const rest = line.slice(sr.index + sr[0].length);
+    const kg = rest.match(/(\d+(?:[.,]\d+)?)\s*kg/i);
+    let restS = 60;
+    const mmss = rest.match(/(\d+)\s*[:'’]\s*(\d{2})\b/);
+    const mins = rest.match(/(\d+(?:[.,]\d+)?)\s*(min|m\b|'|’)/i);
+    const secs = rest.match(/(\d+)\s*(s\b|seg|"|”)/i);
+    if (mmss) restS = +mmss[1] * 60 + +mmss[2];
+    else if (secs) restS = +secs[1];
+    else if (mins) restS = Math.round(parseFloat(mins[1].replace(',', '.')) * 60);
+    out.push({ name, sets: Math.min(20, +sr[1]), reps: sr[2] ? Math.min(255, +sr[2]) : 0,
+               rest: Math.min(900, restS), load: kg ? parseFloat(kg[1].replace(',', '.')) : 0 });
+  }
+  return out.slice(0, GYM.MAX_EX);
 }
 
-function renderEvents() {
-  const list = upcoming();
-  $('#evCount').textContent = Math.min(list.length, 48);
-  $('#events').innerHTML = list.length ? list.map((e, i) => {
-    const d = new Date(e.date + 'T12:00');
-    return `<div class="card row" style="${i >= 48 ? 'opacity:.4' : ''}">
-      <span class="ev-dot" style="background:${COLORS[e.color]}"></span>
-      <div class="grow"><b>${esc(e.title)}</b><div class="muted">${d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })} · ${e.time || 'dia todo'}</div></div>
-      <button class="ghost" data-ev="${e.id}" aria-label="Remover">✕</button></div>`;
-  }).join('') : '<p class="muted">Sem compromissos.</p>';
-  document.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => { events = events.filter(e => e.id != b.dataset.ev); store.set('events', events); renderEvents(); });
+function renderGymPlan() {
+  const el = $('#gymPlan');
+  $('#btnGymSend').disabled = !(gymPlan && gymPlan.length);
+  if (!gymPlan || !gymPlan.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="card">' + gymPlan.map((e, i) => `<div class="row" style="margin:4px 0">
+      <span class="grow">${i + 1}. ${esc(e.name)}</span>
+      <span class="muted">${e.sets}x${e.reps || 'livre'}${e.load ? ' · ' + e.load + ' kg' : ''} · ${Treinos.mmss(e.rest)}</span></div>`).join('') + '</div>';
 }
 
-$('#btnAddEv').onclick = () => {
-  const title = $('#evTitle').value.trim(); if (!title || !$('#evDate').value) return;
-  events.push({ id: Date.now(), title, date: $('#evDate').value, time: $('#evTime').value || '', color: +$('#evColor').value });
-  store.set('events', events); $('#evTitle').value = ''; renderEvents();
+$('#btnGymParse').onclick = () => {
+  store.set('gymText', $('#gymText').value);
+  gymPlan = parseGym($('#gymText').value); store.set('gymPlan', gymPlan);
+  $('#gymMsg').textContent = gymPlan.length ? `${gymPlan.length} exercício(s). Confira e envie.` : 'Não encontrei exercícios. Use o formato "Nome 4x10 60kg 90s".';
+  renderGymPlan();
 };
 
-$('#btnPlanEv').onclick = () => {
-  if (!plan || !plan.treinos.length) { alert('Interprete os treinos primeiro (aba Treinos).'); return; }
-  // distribui os treinos a partir de amanha, um dia sim outro nao
-  const d = new Date(); d.setDate(d.getDate() + 1);
-  plan.treinos.forEach((t, i) => {
-    const x = new Date(d); x.setDate(d.getDate() + i * 2);
-    x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
-    events.push({ id: Date.now() + i, title: t.nome.slice(0, 23), date: x.toISOString().slice(0, 10), time: '', color: 1 });
-  });
-  store.set('events', events); renderEvents();
-};
-
-function truncBytes(s, n) { const enc = new TextEncoder(); let b = enc.encode(s); while (b.length > n) { s = [...s].slice(0, -1).join(''); b = enc.encode(s); } return b; }
-
-function calImage() {
-  const list = upcoming().slice(0, 48);
-  const img = new Uint8Array(16 + 48 * 32), dv = new DataView(img.buffer);
-  dv.setUint32(0, 0x314C4143, true); img[4] = 1; img[5] = list.length;
-  list.forEach((e, i) => {
-    const o = 16 + i * 32, [y, m, d] = e.date.split('-').map(Number);
-    dv.setUint16(o, y, true); img[o + 2] = m; img[o + 3] = d;
-    if (e.time) { const [hh, mm] = e.time.split(':').map(Number); img[o + 4] = hh; img[o + 5] = mm; } else { img[o + 4] = 255; }
-    img[o + 6] = e.color & 3;
-    img.set(truncBytes(e.title, 23), o + 8);
-  });
-  return img;
+async function gymSelect() {
+  const v = await req([ch('A'), ch('G')], ch('a'));
+  if (!v[2]) throw new Error('o app Academia não foi encontrado no relógio');
+  return v[3] | v[4] << 8;
 }
+async function gymReadBytes(ofs, n) {
+  const out = new Uint8Array(n);
+  for (let o = 0; o < n; o += 17) {
+    const k = Math.min(17, n - o), a = ofs + o;
+    const v = await req([ch('Q'), a & 255, a >> 8, k], ch('q'));
+    out.set(v.subarray(3, 3 + k), o);
+  }
+  return out;
+}
+function utf8Trunc(s, n) { const enc = new TextEncoder(); let b = enc.encode(s); while (b.length > n) { s = [...s].slice(0, -1).join(''); b = enc.encode(s); } return b; }
 
-$('#btnSendCal').onclick = async () => {
-  const btn = $('#btnSendCal'); btn.disabled = true;
+$('#btnGymSend').onclick = async () => {
+  const btn = $('#btnGymSend'); btn.disabled = true;
   try {
-    const img = calImage(), CH = 17, n = Math.ceil(img.length / CH);
-    for (let k = 0, ofs = 0; ofs < img.length; ofs += CH, k++) {
-      await req([ch('E'), ofs & 255, ofs >> 8, ...img.subarray(ofs, ofs + CH)], ch('e'));
-      progress('#calBar', (k + 1) / (n + 1));
+    await gymSelect();
+    const old = await gymReadBytes(0, 16), odv = new DataView(old.buffer);
+    const keep = odv.getUint32(0, true) === GYM.MAGIC;
+    const n = gymPlan.length, img = new Uint8Array(16 + n * 24), dv = new DataView(img.buffer);
+    const p = { sex: +$('#gSex').value, age: +$('#gAge').value, weight: +$('#gWeight').value };
+    dv.setUint32(0, GYM.MAGIC, true); img[4] = 1; img[5] = n; img[6] = p.sex; img[7] = Math.min(99, p.age);
+    dv.setUint16(8, Math.round(p.weight * 10), true);
+    img[10] = keep && old[10] <= GYM.MAX_RES ? old[10] : 0; img[11] = keep && old[11] < GYM.MAX_RES ? old[11] : 0;
+    gymPlan.forEach((e, i) => {
+      const o = 16 + i * 24;
+      img.set(utf8Trunc(e.name, GYM.NAME - 1), o);
+      img[o + 18] = e.sets; img[o + 19] = e.reps; dv.setUint16(o + 20, e.rest, true); dv.setUint16(o + 22, Math.round(e.load * 10), true);
+    });
+    // exercicios primeiro, cabecalho por ultimo
+    const order = []; for (let o = 16; o < img.length; o += 17) order.push(o); order.push(0);
+    let k = 0;
+    for (const o of order) {
+      const end = o === 0 ? 16 : Math.min(img.length, o + 17);
+      const v = await req([ch('P'), o & 255, o >> 8, ...img.subarray(o, end)], ch('p'));
+      if (!v[3]) throw new Error('o relógio recusou a gravação');
+      progress('#gymBar', ++k / order.length);
     }
-    const s = await req([ch('S')], ch('s'));
-    if (!s[1]) throw new Error('o relógio recusou os dados');
-    progress('#calBar', 1);
-    $('#calMsg').textContent = `✓ ${img[5]} compromisso(s) no relógio. Aperte o botão do relógio para sair.`;
-  } catch (e) { $('#calMsg').textContent = '✗ ' + e.message; log('erro:', e.message); }
+    store.set('gymNames', gymPlan.map(e => e.name));
+    $('#gymMsg').textContent = `✓ ${n} exercício(s) no relógio. Aperte o botão do relógio para sair do Sincronizar.`;
+  } catch (e) { $('#gymMsg').textContent = '✗ ' + e.message; log('erro academia:', e.message); }
+  progress('#gymBar', null); btn.disabled = false;
+};
+
+function renderGymResults() {
+  $('#btnGymCsv').disabled = !gymResults.length;
+  $('#gymResults').innerHTML = gymResults.slice().reverse().map(r => {
+    const d = new Date(r.start * 1000);
+    const when = d.toLocaleDateString('pt-BR', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('pt-BR', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' });
+    return `<div class="card"><div class="row"><b class="grow">Academia</b><span class="muted">${when}</span></div>
+      <div class="kpis"><div><b>${fmtTime(r.dur)}</b><span>tempo</span></div><div><b>${r.kcal}</b><span>kcal</span></div>
+      <div><b>${r.avg || '–'}</b><span>FC méd.</span></div><div><b>${r.sets}</b><span>séries</span></div></div>
+      <details><summary class="muted" style="margin-top:8px">Exercícios</summary><table><tr><th>exercício</th><th>séries</th></tr>
+      ${r.done.map((s, i) => s ? `<tr><td>${esc((r.names || [])[i] || 'Exercício ' + (i + 1))}</td><td>${s}</td></tr>` : '').join('')}</table></details></div>`;
+  }).join('');
+}
+
+$('#btnGymRead').onclick = async () => {
+  const btn = $('#btnGymRead'); btn.disabled = true;
+  try {
+    await gymSelect();
+    const h = await gymReadBytes(0, 16), dv = new DataView(h.buffer);
+    if (dv.getUint32(0, true) !== GYM.MAGIC) throw new Error('nenhum treino de academia no relógio ainda');
+    const n = Math.min(h[10], GYM.MAX_RES), next = h[11] % GYM.MAX_RES;
+    const names = store.get('gymNames', []), seen = new Set(gymResults.map(r => r.start));
+    let novos = 0;
+    for (let i = 0; i < n; i++) {
+      const slot = (next + GYM.MAX_RES - n + i) % GYM.MAX_RES;
+      const b = await gymReadBytes(GYM.OFS_RES + slot * GYM.RES, GYM.RES), v = new DataView(b.buffer);
+      const r = { start: v.getUint32(0, true), dur: v.getUint16(4, true), kcal: v.getUint16(6, true), avg: b[8], max: b[9], sets: b[11], done: Array.from(b.subarray(12, 28)), names };
+      $('#gymReadMsg').textContent = `Lendo ${i + 1}/${n}…`;
+      if (!seen.has(r.start)) { gymResults.push(r); novos++; }
+    }
+    gymResults.sort((a, b) => a.start - b.start); store.set('gymResults', gymResults);
+    $('#gymReadMsg').textContent = `✓ ${novos} treino(s) novo(s).`;
+    renderGymResults();
+  } catch (e) { $('#gymReadMsg').textContent = '✗ ' + e.message; log('erro academia:', e.message); }
   btn.disabled = false;
 };
 
+$('#btnGymCsv').onclick = () => {
+  const rows = [['data', 'duracao_s', 'kcal', 'fc_media', 'fc_max', 'series', 'exercicio', 'series_feitas']];
+  for (const r of gymResults) {
+    const d = new Date(r.start * 1000).toISOString().slice(0, 16).replace('T', ' ');
+    rows.push([d, r.dur, r.kcal, r.avg, r.max, r.sets, 'total', '']);
+    r.done.forEach((s, i) => s && rows.push([d, '', '', '', '', '', (r.names || [])[i] || 'Exercício ' + (i + 1), s]));
+  }
+  const csv = rows.map(r => r.map(x => /[",;\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : x).join(';')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = 'academia_bip.csv'; a.click();
+};
 
 /* ---------------------------------------------------------------- sono */
 const DEEP = '#5b6cff', LIGHT = '#9fb0ff', AWAKE = '#f5c542';
@@ -1149,9 +1218,30 @@ $('#btnSleep').onclick = async () => {
   btn.disabled = false;
 };
 
+/* ---------------------------------------------------------------- ajustes (caracteristica de configuracao) */
+const CHR_CONFIG = '00000003-0000-3512-2118-0009af100700';
+async function setLiftWrist(on) {
+  const m = t => { $('#liftMsg').textContent = t; };
+  try {
+    if (!ble.srv || !ble.dev.gatt.connected || !ble.authOk) throw new Error('conecte o relógio primeiro');
+    const c = await (await ble.srv.getPrimaryService(MI_SVC)).getCharacteristic(CHR_CONFIG);
+    let resp = null;
+    const h = e => { resp = new Uint8Array(e.target.value.buffer.slice(0)); log('ajuste:', hex(resp)); };
+    try { c.addEventListener('characteristicvaluechanged', h); await c.startNotifications(); } catch (e) {}
+    await c.writeValue(Uint8Array.from([0x06, 0x05, 0x00, on ? 0x01 : 0x00]));
+    await sleep(800);
+    try { await c.stopNotifications(); } catch (e) {}
+    c.removeEventListener('characteristicvaluechanged', h);
+    if (resp && resp[0] === 0x10 && resp[resp.length - 1] !== 0x01 && resp.length <= 4) throw new Error('o relógio recusou (' + hex(resp) + ')');
+    m(on ? '✓ Ligado: gire o pulso para acender a tela.' : '✓ Desligado.');
+  } catch (e) { m('✗ ' + e.message); log('erro ajuste:', e.message); }
+}
+$('#btnLiftOn').onclick = () => setLiftWrist(true);
+$('#btnLiftOff').onclick = () => setLiftWrist(false);
+
 $('#authKey').value = store.get('authkey', '');
 $('#authKey').onchange = () => store.set('authkey', $('#authKey').value.trim());
-renderPlan(); renderResults(); renderEvents(); renderSleep();
+renderPlan(); renderResults(); renderGymPlan(); renderGymResults(); renderSleep();
 </script>
 </body>
 </html>
